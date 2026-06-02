@@ -2,7 +2,7 @@
 
 <img width="140" src="src-tauri/icons/source.webp" alt="PvZ2 Gardendless icon">
 
-# PvZ2 Gardendless Tauri
+# PvZ2 Gardendless Port
 
 A native desktop wrapper for **PvZ2 Gardendless**, packaged with **Tauri**. For people who doesnt give a fuck bout docker
 
@@ -48,7 +48,6 @@ The app starts a local asset server on `127.0.0.1` with a random port, then open
 
 ## Troubleshooting
 
-- **GPU/WebGL issues on Linux** — Wayland can be inconsistent. See [upstream issue #85](https://github.com/Gzh0821/pvzg_site/issues/85).
 - **No sound** — Set `Audio Load Mode = DOM` in game settings.
 - **Missing assets** — Ensure `docs/index.html` exists for local dev.
 
