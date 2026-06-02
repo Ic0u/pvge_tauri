@@ -1,0 +1,27 @@
+[package]
+name = "pvzge"
+version = "0.8.2"
+description = "PvZ2 Gardendless - Desktop Edition"
+authors = ["Gaozih", "Marcus Nguyen"]
+edition = "2021"
+
+[build-dependencies]
+# Generates Tauri context at compile time (icon embedding, config parsing)
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# Desktop app framework: webview, window management, packaging
+tauri = { version = "2", features = [] }
+# OS-level notifications (macOS Notification Center, Linux libnotify)
+tauri-plugin-notification = { version = "2", default-features = false }
+# Sync HTTP file server — serves the 1.1 GB game assets from disk
+rouille = { version = "3", default-features = false }
+# Safe URL path decoding for local asset requests
+percent-encoding = "2"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

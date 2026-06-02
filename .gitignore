@@ -1,0 +1,16 @@
+/.claude/
+/.DS_Store
+**/.DS_Store
+/.vscode/
+/node_modules/
+/dist/
+/release/
+docs/.DS_Store
+docs/**/.DS_Store
+src-tauri/.DS_Store
+/src-tauri/target/
+/src-tauri/node_modules/
+/src-tauri/dist/
+/src-tauri/release/
+/src-tauri/gen/android/
+/src-tauri/gen/apple/
