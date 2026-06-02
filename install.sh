@@ -20,37 +20,46 @@ set -euo pipefail
 REPO="Ic0u/pvge_tauri"
 APP_NAME="PvZ2 Gardendless"
 APP_ID="com.pvzge.desktop"
-MIN_FREE_MB=2600                       # download (~1G) + extracted app (~1.1G) + slack
+MIN_FREE_MB=2600
 MARKER="${HOME}/.local/share/pvzge/version"
 
-# ── PvZ2 green palette ──────────────────────────────────────────────────────
+# ── PvZ2 green palette (256-color with graceful fallback) ────────────────
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ] && command -v tput >/dev/null 2>&1 && [ "$(tput colors 2>/dev/null || echo 0)" -ge 256 ]; then
   R=$'\033[0m';  G1=$'\033[38;5;154m'; G2=$'\033[38;5;76m'
   G3=$'\033[38;5;34m'; G4=$'\033[38;5;28m'; WH=$'\033[1;37m'
   RD=$'\033[1;31m'; YL=$'\033[38;5;220m'; DIM=$'\033[2m'
-  OG=$'\033[38;5;208m'          # orange (number 2)
-  GY=$'\033[38;5;245m'          # grey   (zombies)
-  Y2=$'\033[38;5;214m'          # yellow-orange (gardenless gradient)
-  Y3=$'\033[38;5;208m'          # deep orange   (gardenless gradient end)
-  BD=$'\033[1m'                 # bold
+  OG=$'\033[38;5;208m'; GY=$'\033[38;5;245m'
+  Y2=$'\033[38;5;214m'; Y3=$'\033[38;5;208m'
+  BD=$'\033[1m'; UL=$'\033[4m'
+  # Box-drawing border color
+  BX=$'\033[38;5;240m'
   TTY=1
 else
   R=''; G1=''; G2=''; G3=''; G4=''; WH=''; RD=''; YL=''; DIM=''
-  OG=''; GY=''; Y2=''; Y3=''; BD=''; TTY=0
+  OG=''; GY=''; Y2=''; Y3=''; BD=''; UL=''; BX=''; TTY=0
 fi
 
-# ── Output helpers ──────────────────────────────────────────────────────────
-info() { printf '%s  ▸%s %s%s%s\n'  "$G2" "$R" "$WH" "$*" "$R"; }
-ok()   { printf '%s  ✓%s %s%s%s\n'  "$G3" "$R" "$WH" "$*" "$R"; }
-warn() { printf '%s  !%s %s%s%s\n'  "$YL" "$R" "$WH" "$*" "$R"; }
-step() { printf '\n%s  ══ %s ══%s\n\n' "$G1" "$*" "$R"; }
-die()  { printf '\n%s  ✗ %s%s\n\n' "$RD" "$*" "$R" >&2; exit 1; }
+# ── TUI primitives ──────────────────────────────────────────────────────
+ln()    { printf '%s' "$R"; }                          # reset inline
+nl()    { echo ""; }
+pad()   { printf '  '; }                               # left gutter
+line()  { pad; printf '%s%s%s\n' "$BX" "$1" "$R"; }   # draw a full-width box line
+divider() {
+  pad; printf '%s──────────────────────────────────────────%s\n' "$BX" "$R"
+}
 
-# ── Interactive input (works under `curl | bash` by reading /dev/tty) ────────
+info() { pad; printf '%s▸%s %s%s%s\n'   "$G2" "$R" "$WH" "$*" "$R"; }
+ok()   { pad; printf '%s✓%s %s%s%s\n'   "$G3" "$R" "$WH" "$*" "$R"; }
+warn() { pad; printf '%s!%s %s%s%s\n'   "$YL" "$R" "$WH" "$*" "$R"; }
+hint() { pad; printf '%s%s%s\n'          "$DIM" "$*" "$R"; }
+die()  { nl; pad; printf '%s✗ %s%s\n\n' "$RD" "$*" "$R" >&2; exit 1; }
+step() { nl; pad; printf '%s━━ %s%s %s━━%s\n\n' "$G1" "$WH" "$*" "$G1" "$R"; }
+
+# ── Interactive input (reads /dev/tty so curl|bash works) ────────────────
 INTERACTIVE=0
 if [ -z "${PVZGE_YES:-}" ] && [ -r /dev/tty ] && [ -t 1 ]; then INTERACTIVE=1; fi
 
-ask() { # ask "prompt" "default" -> echoes the answer (or default)
+ask() {
   local prompt="$1" def="${2:-}" ans=""
   if [ "$INTERACTIVE" = "1" ]; then
     printf '%s%s%s' "$G2" "$prompt" "$R" > /dev/tty
@@ -59,12 +68,13 @@ ask() { # ask "prompt" "default" -> echoes the answer (or default)
   printf '%s' "${ans:-$def}"
 }
 
-confirm() { # confirm "prompt" "Y|N default" -> 0 if yes
+confirm() {
   local def="${2:-N}" ans
   ans="$(ask "$1 " "$def")"
   case "$ans" in [yY]*) return 0 ;; *) return 1 ;; esac
 }
 
+# ── Banner (peashooter + colored game title) ─────────────────────────────
 banner() {
   printf '\n%s' "$G1"
   cat <<'PEA'
@@ -93,7 +103,6 @@ banner() {
 ⠀⠀⠀⠀⠀⠀⢸⡳⣌⣛⢦⢳⡹⢤⠳⣍⠶⣙⣾⡟⠹⣷⣧⢚⡵⣊⢧⡹⣌⢏⡞⣱⢋⡖⣻
 ⠀⠀⠀⠀⠀⠀⠘⢷⡜⡜⣎⠳⣜⢣⡛⣬⢳⣽⠞⠀⠀⠈⠛⠿⣶⣭⣖⣣⢝⠮⡜⣥⠯⠞⠋
 PEA
-  # PLANTS in green, VS in yellow, ZOMBIES in grey, 2 in orange
   printf '%s%s' "$R" "$BD"
   printf '%s█████▄ ▄▄     ▄▄▄  ▄▄  ▄▄ ▄▄▄▄▄▄%s ' "$G1" "$R"
   printf '%s%s▄▄▄▄   ▄▄ ▄▄  ▄▄▄▄%s    '           "$BD" "$YL" "$R"
@@ -107,8 +116,7 @@ PEA
   printf '%s%s ▀█▀  ▄▄██▀ ▄%s   '                      "$BD" "$YL" "$R"
   printf '%s██████ ▀███▀ ██   ██ ██▄█▀ ██ ██▄▄▄ ▄▄██▀%s   '  "$GY" "$R"
   printf '%s███▄▄%s\n'                                "$OG" "$R"
-  echo ""
-  # GARDENLESS in yellow→orange gradient
+  nl
   printf '           %s▄████   ▄▄▄  ▄▄▄▄%s'          "$YL" "$R"
   printf '%s  ▄▄▄▄  ▄▄▄▄▄%s'                         "$Y2" "$R"
   printf '%s ▄▄  ▄▄ ▄▄    ▄▄▄▄▄  ▄▄▄▄  ▄▄▄▄%s\n'   "$Y3" "$R"
@@ -118,12 +126,37 @@ PEA
   printf '           %s▀███▀  ██▀██ ██ ██%s'          "$YL" "$R"
   printf '%s ████▀ ██▄▄▄%s'                            "$Y2" "$R"
   printf '%s ██ ▀██ ██▄▄▄ ██▄▄▄ ▄▄██▀ ▄▄██▀%s\n'    "$Y3" "$R"
-  echo ""
-  printf '%s      macOS / Linux port · Marcus Nguyen%s\n' "$G4" "$R"
-  printf '%s      github.com/%s%s\n\n'                  "$DIM" "$REPO" "$R"
+  nl
 }
 
-# ── Spinner (degrades to a plain wait on non-tty) ───────────────────────────
+# ── System info card (shown after banner) ────────────────────────────────
+sysinfo() {
+  local cur; cur="$(installed_version)"
+  local free_mb; free_mb="$(df -Pm / 2>/dev/null | awk 'NR==2 {print $4}')" || free_mb="?"
+  local free_h
+  if [ "$free_mb" != "?" ] && [ "$free_mb" -ge 1024 ] 2>/dev/null; then
+    free_h="$(awk "BEGIN{printf \"%.1f GB\", $free_mb/1024}")"
+  else
+    free_h="${free_mb} MB"
+  fi
+
+  line "╭──────────────────────────────────────────╮"
+  pad; printf '%s│%s  %sSystem%s %-34s%s│%s\n'      "$BX" "$R" "$BD$WH" "$R" "" "$BX" "$R"
+  line "│                                          │"
+  pad; printf '%s│%s  %sOS         %s%-29s %s│%s\n' "$BX" "$R" "$DIM" "$WH" "${PLATFORM} (${ARCH})" "$BX" "$R"
+  if [ -n "$cur" ]; then
+    pad; printf '%s│%s  %sInstalled  %s%-29s %s│%s\n' "$BX" "$R" "$DIM" "$G3" "$cur" "$BX" "$R"
+  else
+    pad; printf '%s│%s  %sInstalled  %s%-29s %s│%s\n' "$BX" "$R" "$DIM" "$YL" "not found" "$BX" "$R"
+  fi
+  pad; printf '%s│%s  %sLatest     %s%-29s %s│%s\n' "$BX" "$R" "$DIM" "$G1" "${VERSION:-…}" "$BX" "$R"
+  pad; printf '%s│%s  %sDisk free  %s%-29s %s│%s\n' "$BX" "$R" "$DIM" "$WH" "$free_h" "$BX" "$R"
+  line "│                                          │"
+  line "╰──────────────────────────────────────────╯"
+  nl
+}
+
+# ── Spinner ──────────────────────────────────────────────────────────────
 spin() {
   local msg="$1"; shift
   if [ "$TTY" = "0" ]; then "$@"; return $?; fi
@@ -132,7 +165,7 @@ spin() {
   printf '\033[?25l'
   while kill -0 "$pid" 2>/dev/null; do
     i=$(( (i + 1) % ${#frames} ))
-    printf '\r%s  %s%s %s%s%s' "$G2" "${frames:$i:1}" "$R" "$WH" "$msg" "$R"
+    printf '\r  %s%s%s %s%s%s' "$G2" "${frames:$i:1}" "$R" "$WH" "$msg" "$R"
     sleep 0.08
   done
   if wait "$pid"; then rc=0; else rc=$?; fi
@@ -140,7 +173,7 @@ spin() {
   return "$rc"
 }
 
-# ── Cleanup: temp dir, mounted DMG, cursor — always runs ────────────────────
+# ── Cleanup trap ─────────────────────────────────────────────────────────
 TMP=""; MOUNTED_DMG=""
 detach_dmg() {
   [ -n "$MOUNTED_DMG" ] && [ -d "$MOUNTED_DMG" ] || { MOUNTED_DMG=""; return 0; }
@@ -158,7 +191,7 @@ trap 'die "Interrupted."' INT TERM
 
 require() { command -v "$1" >/dev/null 2>&1 || die "Missing required tool: $1"; }
 
-# ── GitHub release helpers ──────────────────────────────────────────────────
+# ── GitHub release helpers ───────────────────────────────────────────────
 json_assets() { printf '%s' "$RELEASE_JSON" | grep -o '"browser_download_url"[^,]*' | sed 's/.*: *"//;s/".*//'; }
 pick()        { json_assets | grep -F "$1" | grep -i "${2}\$" | head -1; }
 
@@ -187,19 +220,28 @@ resolve_release() {
 check_space() {
   local free_mb; free_mb="$(df -Pm "$1" 2>/dev/null | awk 'NR==2 {print $4}')" || free_mb=""
   if [ -n "$free_mb" ] && [ "$free_mb" -lt "$MIN_FREE_MB" ]; then
-    warn "Low disk space on $1 (${free_mb}MB free, ~${MIN_FREE_MB}MB recommended)."
+    warn "Low disk space on $1 (${free_mb}MB free, ~${MIN_FREE_MB}MB needed)."
+    if [ "$INTERACTIVE" = "1" ]; then
+      confirm "  Continue anyway? [y/N]" "N" || die "Aborted — free up disk space and re-run."
+    fi
   fi
 }
 
-# Download with resume + retry (incl. transient TCP resets). Returns non-zero on failure.
 download() {
-  local url="$1" out="$2"
-  step "Downloading  ·  ${VERSION}"
-  printf '%s    %s%s  %s(%s)%s\n\n' "$DIM" "$(basename "$url")" "$R" "$DIM" "$(human_size "$url")" "$R"
+  local url="$1" out="$2" sz
+  sz="$(human_size "$url")"
+  step "Downloading"
+  nl
+  line "╭──────────────────────────────────────────╮"
+  pad; printf '%s│%s  %sFile%s   %-34s%s│%s\n'     "$BX" "$R" "$DIM" "$WH" "$(basename "$url")" "$BX" "$R"
+  pad; printf '%s│%s  %sSize%s   %-34s%s│%s\n'     "$BX" "$R" "$DIM" "$WH" "$sz" "$BX" "$R"
+  pad; printf '%s│%s  %sFrom%s   %-34s%s│%s\n'     "$BX" "$R" "$DIM" "$DIM" "GitHub Releases" "$BX" "$R"
+  line "╰──────────────────────────────────────────╯"
+  nl
   curl -fSL --retry 5 --retry-delay 2 --retry-all-errors --retry-connrefused -C - \
        --progress-bar "$url" -o "$out" || return 1
   [ -s "$out" ] || return 1
-  echo ""; ok "Download complete"
+  nl; ok "Download complete"
 }
 
 installed_version() {
@@ -221,17 +263,16 @@ quit_if_running() {
   pgrep -f "$APP_NAME" >/dev/null 2>&1 || return 0
   info "Closing running instance..."
   osascript -e "quit app \"$APP_NAME\"" 2>/dev/null || true
-  sleep 1
-  pkill -f "$APP_NAME.app" 2>/dev/null || true
+  sleep 1; pkill -f "$APP_NAME.app" 2>/dev/null || true
 }
 
-# ═══════════════════════════ INSTALL (macOS) ═══════════════════════════════
-# Returns non-zero on recoverable failure so the caller can offer build-from-source.
+# ═══════════════════════════ INSTALL macOS ════════════════════════════════
 install_macos() {
   require hdiutil; require ditto; require curl
   local arch="$ARCH"
   [ "$(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0)" = "1" ] && arch="arm64"
 
+  step "Resolving build"
   local url=""
   case "${PVZGE_ARCH:-auto}" in
     universal) url="$(pick 'macOS-Universal' '.dmg' || true)" ;;
@@ -246,16 +287,16 @@ install_macos() {
         esac
       fi ;;
   esac
-  [ -n "$url" ] || { warn "No macOS build in ${VERSION}."; return 1; }
-  ok "Selected $(basename "$url")"
+  [ -n "$url" ] || { warn "No macOS build found in ${VERSION}."; return 1; }
+  ok "$(basename "$url")"
 
   local dest="/Applications/${APP_NAME}.app"
   if [ -z "${PVZGE_FORCE:-}" ] && [ "${ACTION}" != "reinstall" ] && [ -d "$dest" ]; then
     local cur; cur="$(installed_version)"
     if [ -n "$cur" ] && [ "$cur" = "${VERSION}" ]; then
-      ok "Already on the latest version (${cur})"
-      DONE_HINT="open -a \"${APP_NAME}\""
-      return 0
+      nl; ok "You're already on the latest version (${cur})."
+      hint "  Run with PVZGE_FORCE=1 or choose Reinstall to re-download."
+      DONE_HINT="open -a \"${APP_NAME}\""; return 0
     fi
     [ -n "$cur" ] && info "Updating  ${cur}  →  ${VERSION}"
   fi
@@ -265,40 +306,53 @@ install_macos() {
   download "$url" "${TMP}/pvzge.dmg" || { warn "Download failed."; return 1; }
 
   step "Installing"
+  info "Mounting disk image..."
   local out
   out="$(hdiutil attach -nobrowse -noverify -noautoopen -readonly "${TMP}/pvzge.dmg" 2>/dev/null)" \
-    || { warn "Could not mount disk image."; return 1; }
+    || { warn "Could not mount disk image (corrupt download?)."; return 1; }
   MOUNTED_DMG="$(printf '%s' "$out" | grep -Eo '/Volumes/[^[:cntrl:]]*' | tail -1)"
-  [ -n "$MOUNTED_DMG" ] && [ -d "$MOUNTED_DMG" ] || { warn "No volume mounted."; return 1; }
+  [ -n "$MOUNTED_DMG" ] && [ -d "$MOUNTED_DMG" ] || { warn "No volume found."; return 1; }
+  ok "Mounted"
 
   local app_src
   app_src="$(find "$MOUNTED_DMG" -maxdepth 1 -name '*.app' -print -quit 2>/dev/null || true)"
   [ -n "$app_src" ] || { warn "No .app inside the image."; detach_dmg; return 1; }
 
   local SUDO=""
-  if [ ! -w /Applications ]; then SUDO="sudo"; info "Administrator access needed for /Applications"; sudo -v || { warn "No admin access."; detach_dmg; return 1; }; fi
+  if [ ! -w /Applications ]; then
+    SUDO="sudo"
+    info "Administrator access needed for /Applications"
+    sudo -v || { warn "Could not get admin access."; detach_dmg; return 1; }
+  fi
 
   quit_if_running
-  [ -d "$dest" ] && { info "Removing previous installation..."; $SUDO rm -rf "$dest"; }
-  spin "Copying ${APP_NAME} to /Applications" $SUDO ditto "$app_src" "$dest" || { warn "Copy failed."; detach_dmg; return 1; }
+  [ -d "$dest" ] && { info "Removing previous version..."; $SUDO rm -rf "$dest"; }
+  spin "Copying to /Applications" $SUDO ditto "$app_src" "$dest" || { warn "Copy failed."; detach_dmg; return 1; }
+  ok "App installed"
   detach_dmg
 
   [ -d "$dest/Contents/MacOS" ] || { warn "Bundle looks incomplete."; return 1; }
-  ok "Installed to ${dest}"
 
-  info "Clearing Gatekeeper quarantine..."
+  info "Bypassing Gatekeeper..."
   $SUDO xattr -dr com.apple.quarantine "$dest" 2>/dev/null \
-    || warn "Couldn't strip quarantine — right-click ▸ Open if blocked."
+    || warn "Couldn't strip quarantine. Right-click the app ▸ Open to bypass."
+  ok "Quarantine cleared"
   sudo -n rm -rf /Library/Caches/com.apple.iconservices.store 2>/dev/null || true
   killall Finder Dock 2>/dev/null || true
+
+  info "Cleaning up temporary files..."
+  rm -rf "$TMP" 2>/dev/null || true; TMP=""
+  ok "Done"
+
   DONE_HINT="open -a \"${APP_NAME}\""
 }
 
-# ═══════════════════════════ INSTALL (Linux) ═══════════════════════════════
+# ═══════════════════════════ INSTALL Linux ════════════════════════════════
 install_linux() {
   require curl
-  [ "$ARCH" = "x86_64" ] || { warn "Only x86_64 Linux builds exist (yours: ${ARCH})."; return 1; }
+  [ "$ARCH" = "x86_64" ] || { warn "Only x86_64 Linux builds are available (yours: ${ARCH})."; return 1; }
 
+  step "Resolving build"
   local appimage deb url kind
   appimage="$(pick 'Linux-x86_64' '.AppImage' || true)"
   deb="$(pick 'Linux-x86_64' '.deb' || true)"
@@ -307,13 +361,13 @@ install_linux() {
   elif [ -n "$appimage" ]; then url="$appimage"; kind="appimage"
   elif [ -n "$deb" ];      then url="$deb"; kind="deb"
   else warn "No Linux build in ${VERSION}."; return 1; fi
-  ok "Selected $(basename "$url")"
+  ok "$(basename "$url")"
 
   if [ -z "${PVZGE_FORCE:-}" ] && [ "${ACTION}" != "reinstall" ] \
      && [ -f "$MARKER" ] && [ "$(cat "$MARKER" 2>/dev/null)" = "${VERSION}" ]; then
-    ok "Already on the latest version (${VERSION})"
-    DONE_HINT="PvZ2 Gardendless  (from your application menu)"
-    return 0
+    nl; ok "You're already on the latest version (${VERSION})."
+    hint "  Run with PVZGE_FORCE=1 or choose Reinstall to re-download."
+    DONE_HINT="${APP_NAME}  (from your app menu)"; return 0
   fi
   [ -f "$MARKER" ] && info "Updating  $(cat "$MARKER" 2>/dev/null)  →  ${VERSION}"
 
@@ -324,7 +378,8 @@ install_linux() {
   step "Installing"
   if [ "$kind" = "deb" ]; then
     require sudo
-    spin "Installing package (dpkg)" sudo dpkg -i "$file" || { info "Resolving dependencies..."; sudo apt-get -y -f install || return 1; }
+    spin "Installing package" sudo dpkg -i "$file" \
+      || { info "Resolving dependencies..."; sudo apt-get -y -f install || return 1; }
     ok "Installed via dpkg"
     DONE_HINT="pvzge"; LAUNCH_BIN="$(command -v pvzge 2>/dev/null || echo pvzge)"
   else
@@ -346,20 +401,42 @@ DESKTOP
     case ":$PATH:" in *":$bindir:"*) : ;; *) warn "Add ~/.local/bin to your PATH to launch by name." ;; esac
     DONE_HINT="$target"; LAUNCH_BIN="$target"
   fi
+
+  info "Cleaning up temporary files..."
+  rm -rf "$TMP" 2>/dev/null || true; TMP=""
+  ok "Done"
   mkdir -p "$(dirname "$MARKER")"; printf '%s' "${VERSION}" > "$MARKER" 2>/dev/null || true
 }
 
-# ═══════════════════════════ UNINSTALL ═════════════════════════════════════
+# ═══════════════════════════ UNINSTALL ════════════════════════════════════
 uninstall() {
   step "Uninstall"
-  if ! is_installed; then warn "${APP_NAME} is not installed — nothing to remove."; return 0; fi
-  if [ "$INTERACTIVE" = "1" ]; then confirm "Remove ${APP_NAME} and its data?" "N" || { info "Cancelled."; return 0; }; fi
+  if ! is_installed; then
+    warn "${APP_NAME} doesn't seem to be installed."
+    hint "  Nothing to remove."; return 0
+  fi
+
+  local cur; cur="$(installed_version)"
+  nl
+  line "╭──────────────────────────────────────────╮"
+  pad; printf '%s│%s  %sThis will remove:%s                        %s│%s\n' "$BX" "$R" "$RD" "$R" "$BX" "$R"
+  pad; printf '%s│%s    %-39s%s│%s\n' "$BX" "$R" "• ${APP_NAME} app ${cur}" "$BX" "$R"
+  pad; printf '%s│%s    %-39s%s│%s\n' "$BX" "$R" "• App data, caches & preferences" "$BX" "$R"
+  if [ "$OS" = "Linux" ]; then
+    pad; printf '%s│%s    %-39s%s│%s\n' "$BX" "$R" "• Desktop launcher entry" "$BX" "$R"
+  fi
+  line "╰──────────────────────────────────────────╯"
+  nl
+  if [ "$INTERACTIVE" = "1" ]; then
+    confirm "  Are you sure? [y/N]" "N" || { info "Cancelled."; return 0; }
+  fi
+  nl
 
   if [ "$OS" = "Darwin" ]; then
     quit_if_running
     local dest="/Applications/${APP_NAME}.app" SUDO=""
     [ -w /Applications ] || { SUDO="sudo"; sudo -v 2>/dev/null || true; }
-    [ -d "$dest" ] && { info "Removing app..."; $SUDO rm -rf "$dest"; }
+    [ -d "$dest" ] && { info "Removing app..."; $SUDO rm -rf "$dest"; ok "App removed"; }
     info "Removing app data & caches..."
     rm -rf "${HOME}/Library/Application Support/${APP_ID}" \
            "${HOME}/Library/Caches/${APP_ID}" \
@@ -368,6 +445,7 @@ uninstall() {
     rm -f "${HOME}/Library/Application Support/${APP_ID}/.seen-"* 2>/dev/null || true
     sudo -n rm -rf /Library/Caches/com.apple.iconservices.store 2>/dev/null || true
     killall Finder Dock 2>/dev/null || true
+    ok "Data cleaned"
   else
     if command -v dpkg >/dev/null 2>&1 && dpkg -s pvzge >/dev/null 2>&1; then
       info "Removing package..."; sudo apt-get -y remove pvzge 2>/dev/null || sudo dpkg -r pvzge || true
@@ -376,15 +454,24 @@ uninstall() {
           "${HOME}/.local/share/applications/${APP_ID}.desktop" 2>/dev/null || true
     update-desktop-database "${HOME}/.local/share/applications" 2>/dev/null || true
     rm -rf "$(dirname "$MARKER")" "${HOME}/.config/${APP_ID}" "${HOME}/.local/share/${APP_ID}" 2>/dev/null || true
+    ok "Data cleaned"
   fi
-  ok "${APP_NAME} removed."
+  nl; ok "${APP_NAME} has been completely removed."
+  hint "  Re-run this script any time to install it again."
 }
 
-# ═══════════════════════ BUILD FROM SOURCE (backup) ════════════════════════
+# ═══════════════════════ BUILD FROM SOURCE ════════════════════════════════
 build_from_source() {
   step "Build from source"
-  warn "This clones the full repo (game assets are ~1 GB) and compiles with Tauri."
-  if [ "$INTERACTIVE" = "1" ]; then confirm "Continue building from source?" "Y" || { info "Cancelled."; return 1; }; fi
+  nl
+  line "╭──────────────────────────────────────────╮"
+  pad; printf '%s│%s  %sThis will:%s                               %s│%s\n' "$BX" "$R" "$WH" "$R" "$BX" "$R"
+  pad; printf '%s│%s    %-39s%s│%s\n' "$BX" "$R" "• Clone the repository (~1 GB)" "$BX" "$R"
+  pad; printf '%s│%s    %-39s%s│%s\n' "$BX" "$R" "• Compile with Rust + Tauri" "$BX" "$R"
+  pad; printf '%s│%s    %-39s%s│%s\n' "$BX" "$R" "• Install the built app" "$BX" "$R"
+  line "╰──────────────────────────────────────────╯"
+  nl
+  if [ "$INTERACTIVE" = "1" ]; then confirm "  Continue? [Y/n]" "Y" || { info "Cancelled."; return 1; }; fi
 
   local missing=()
   command -v git   >/dev/null 2>&1 || missing+=("git")
@@ -392,13 +479,14 @@ build_from_source() {
   command -v node  >/dev/null 2>&1 || missing+=("node")
   if [ "${#missing[@]}" -gt 0 ]; then
     warn "Missing build tools: ${missing[*]}"
+    nl
     if [ "$OS" = "Darwin" ]; then
-      info "Install with Homebrew, then re-run:"
-      printf '      %sbrew install rust node git%s\n' "$DIM" "$R"
+      info "Install with Homebrew first:"
+      hint "  brew install rust node git"
     else
-      info "Install with apt + rustup, then re-run:"
-      printf '      %ssudo apt install -y git nodejs npm build-essential libwebkit2gtk-4.1-dev librsvg2-dev%s\n' "$DIM" "$R"
-      printf '      %scurl --proto =https --tlsv1.2 -sSf https://sh.rustup.rs | sh%s\n' "$DIM" "$R"
+      info "Install build dependencies first:"
+      hint "  sudo apt install -y git nodejs npm build-essential libwebkit2gtk-4.1-dev librsvg2-dev"
+      hint "  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
     fi
     return 1
   fi
@@ -411,13 +499,16 @@ build_from_source() {
     if cargo install tauri-cli --version "^2" >/dev/null 2>&1; then tauri_cmd="cargo tauri"
     elif command -v npm >/dev/null 2>&1 && npm install -g @tauri-apps/cli@2 >/dev/null 2>&1; then tauri_cmd="tauri"
     else warn "Could not install the Tauri CLI."; return 1; fi
+    ok "Tauri CLI ready"
   fi
 
   TMP="${TMP:-$(mktemp -d)}"; local src="${TMP}/pvge_tauri"
-  spin "Cloning ${REPO}" git clone --depth 1 "https://github.com/${REPO}.git" "$src" \
+  spin "Cloning repository" git clone --depth 1 "https://github.com/${REPO}.git" "$src" \
     || { warn "Clone failed."; return 1; }
-  info "Compiling (this can take several minutes)..."
+  ok "Cloned"
+  info "Compiling — this can take several minutes..."
   ( cd "$src/src-tauri" && $tauri_cmd build --bundles app ) || { warn "Build failed."; return 1; }
+  ok "Build complete"
 
   if [ "$OS" = "Darwin" ]; then
     local built; built="$(find "$src/src-tauri/target" -maxdepth 5 -name '*.app' -path '*/release/bundle/macos/*' -print -quit)"
@@ -425,119 +516,121 @@ build_from_source() {
     local dest="/Applications/${APP_NAME}.app" SUDO=""
     [ -w /Applications ] || { SUDO="sudo"; sudo -v || return 1; }
     quit_if_running; $SUDO rm -rf "$dest"
-    spin "Installing built app" $SUDO ditto "$built" "$dest" || return 1
+    spin "Installing" $SUDO ditto "$built" "$dest" || return 1
     $SUDO xattr -dr com.apple.quarantine "$dest" 2>/dev/null || true
-    ok "Built & installed to ${dest}"; DONE_HINT="open -a \"${APP_NAME}\""
+    ok "Installed to ${dest}"; DONE_HINT="open -a \"${APP_NAME}\""
   else
     local appimage; appimage="$(find "$src/src-tauri/target" -name '*.AppImage' -print -quit)"
     [ -n "$appimage" ] || { warn "Built AppImage not found."; return 1; }
     local target="${HOME}/.local/bin/PvZ2-Gardendless.AppImage"; mkdir -p "$(dirname "$target")"
     cp "$appimage" "$target"; chmod +x "$target"
-    ok "Built & installed to ${target}"; DONE_HINT="$target"; LAUNCH_BIN="$target"
+    ok "Installed to ${target}"; DONE_HINT="$target"; LAUNCH_BIN="$target"
   fi
 }
 
-# ── Run an install, and on failure offer the build-from-source backup plan ──
 install_with_fallback() {
   local fn="install_${1}"
   if "$fn"; then return 0; fi
-  warn "The download/install method didn't succeed."
+  nl; warn "The pre-built install method didn't succeed."
   if [ "$INTERACTIVE" = "1" ]; then
-    if confirm "Try building from source instead?" "Y"; then build_from_source && return 0; fi
-    die "Installation did not complete."
+    hint "  You can try building from source as a backup plan."
+    nl
+    if confirm "  Build from source instead? [Y/n]" "Y"; then build_from_source && return 0; fi
+    die "Installation did not complete. Re-run to try again."
   else
-    die "Installation failed. Re-run interactively to try building from source."
+    die "Install failed. Re-run interactively or set PVZGE_ACTION=build."
   fi
 }
 
 show_help() {
   step "Help"
-  cat <<HELP
-  ${APP_NAME} — desktop port of PvZ2 Gardendless (Tauri + WebKit).
-
-  ${WH}Menu options${R}
-    Install / Update    Download the latest release and install it
-    Reinstall           Force a clean re-download even if up to date
-    Uninstall           Remove the app, its data, caches and launchers
-    Build from source   Backup plan — clone the repo and compile locally
-    Help                This screen
-    Quit                Exit
-
-  ${WH}One-liner${R}
-    curl -fsSL https://raw.githubusercontent.com/${REPO}/main/install.sh | bash
-
-  ${WH}Non-interactive / scripting${R}
-    PVZGE_ACTION=install|update|reinstall|uninstall|build
-    PVZGE_VERSION=v0.8.2     pin a release          PVZGE_FORCE=1     reinstall anyway
-    PVZGE_ARCH=universal     macOS variant          PVZGE_NO_LAUNCH=1 don't auto-open
-    PVZGE_YES=1              assume defaults         NO_COLOR=1        no colors
-
-  ${WH}Locations${R}
-    macOS   /Applications/${APP_NAME}.app
-    Linux   ~/.local/bin/PvZ2-Gardendless.AppImage  (or apt package 'pvzge')
-
-  Game by Gaozih & the PvZ2 Gardendless Team · port by Marcus Nguyen
-  Releases:  github.com/${REPO}/releases
-HELP
-  echo ""
+  nl
+  line "╭──────────────────────────────────────────╮"
+  pad; printf '%s│%s  %s%sPvZ2 Gardendless%s   desktop port          %s│%s\n' "$BX" "$R" "$BD" "$G1" "$R" "$BX" "$R"
+  line "│──────────────────────────────────────────│"
+  pad; printf '%s│%s  %s1%s  %-37s%s│%s\n' "$BX" "$R" "$G1" "$R" "Install or update to latest" "$BX" "$R"
+  pad; printf '%s│%s  %s2%s  %-37s%s│%s\n' "$BX" "$R" "$G1" "$R" "Reinstall (force re-download)" "$BX" "$R"
+  pad; printf '%s│%s  %s3%s  %-37s%s│%s\n' "$BX" "$R" "$RD" "$R" "Uninstall (removes all data)" "$BX" "$R"
+  pad; printf '%s│%s  %s4%s  %-37s%s│%s\n' "$BX" "$R" "$YL" "$R" "Build from source (backup)" "$BX" "$R"
+  line "│──────────────────────────────────────────│"
+  pad; printf '%s│%s  %sOne-liner:%s                              %s│%s\n' "$BX" "$R" "$DIM" "$R" "$BX" "$R"
+  pad; printf '%s│%s  %scurl -fsSL https://raw.github%s           %s│%s\n' "$BX" "$R" "$G2" "$R" "$BX" "$R"
+  pad; printf '%s│%s  %susercontent.com/%s/%s  %s│%s\n' "$BX" "$R" "$G2" "$REPO" "main/install.sh | bash" "$BX" "$R"
+  line "│──────────────────────────────────────────│"
+  pad; printf '%s│%s  %sEnv overrides:%s                          %s│%s\n' "$BX" "$R" "$DIM" "$R" "$BX" "$R"
+  pad; printf '%s│%s  %sPVZGE_ACTION%s    install|build|uninstall %s│%s\n' "$BX" "$R" "$WH" "$R" "$BX" "$R"
+  pad; printf '%s│%s  %sPVZGE_VERSION%s   pin a specific release  %s│%s\n' "$BX" "$R" "$WH" "$R" "$BX" "$R"
+  pad; printf '%s│%s  %sPVZGE_FORCE%s     reinstall even if same  %s│%s\n' "$BX" "$R" "$WH" "$R" "$BX" "$R"
+  pad; printf '%s│%s  %sNO_COLOR%s        disable colors          %s│%s\n' "$BX" "$R" "$WH" "$R" "$BX" "$R"
+  line "│──────────────────────────────────────────│"
+  pad; printf '%s│%s  %sGame by%s Gaozih & the PvZ2GE Team        %s│%s\n' "$BX" "$R" "$DIM" "$R" "$BX" "$R"
+  pad; printf '%s│%s  %sPort by%s Marcus Nguyen                   %s│%s\n' "$BX" "$R" "$DIM" "$R" "$BX" "$R"
+  line "╰──────────────────────────────────────────╯"
+  nl
 }
 
 finish() {
-  printf '\n%s' "$G1"
+  nl
+  printf '%s' "$G1"
   cat <<'DONE'
    ╭──────────────────────────────────────────────╮
+   │                                              │
    │          🌱  Installed & ready!  🧟           │
+   │                                              │
    ╰──────────────────────────────────────────────╯
 DONE
   printf '%s\n' "$R"
-  info "Relaunch any time with:"
-  printf '\n      %s%s%s\n\n' "$G2" "${DONE_HINT:-}" "$R"
-  printf '%s  Game by Gaozih & the PvZ2 Gardendless Team%s\n' "$DIM" "$R"
-  printf '%s  %s port by Marcus Nguyen ❤️%s\n\n' "$DIM" "${PLATFORM:-}" "$R"
+  info "Launch any time with:"
+  nl
+  printf '      %s$ %s%s%s\n' "$DIM" "$G2" "${DONE_HINT:-}" "$R"
+  nl
+  divider
+  hint "  Game by Gaozih & the PvZ2 Gardendless Team"
+  hint "  ${PLATFORM} port by Marcus Nguyen"
+  nl
 }
 
 launch_app() {
   [ -n "${PVZGE_NO_LAUNCH:-}" ] && return 0
-  info "Opening ${APP_NAME}..."
+  info "Launching ${APP_NAME}..."
   if [ "$OS" = "Darwin" ]; then
     open -a "${APP_NAME}" 2>/dev/null || open "/Applications/${APP_NAME}.app" 2>/dev/null || true
   elif [ -n "${LAUNCH_BIN:-}" ]; then
-    ( setsid "${LAUNCH_BIN}" >/dev/null 2>&1 & ) 2>/dev/null || ( "${LAUNCH_BIN}" >/dev/null 2>&1 & ) 2>/dev/null || true
+    ( setsid "${LAUNCH_BIN}" >/dev/null 2>&1 & ) 2>/dev/null \
+      || ( "${LAUNCH_BIN}" >/dev/null 2>&1 & ) 2>/dev/null || true
   fi
 }
 
-# ── Interactive menu (only when a TTY is available) ─────────────────────────
+# ── Interactive menu ─────────────────────────────────────────────────────
 menu() {
   local cur; cur="$(installed_version)"
-  if [ -n "$cur" ]; then
-    printf '%s  Installed:%s %s%s%s   %s·%s   %sLatest:%s %s%s%s\n\n' \
-      "$DIM" "$R" "$G3" "$cur" "$R" "$DIM" "$R" "$DIM" "$R" "$G1" "${VERSION:-?}" "$R"
-  else
-    printf '%s  Not installed%s   %s·%s   %sLatest:%s %s%s%s\n\n' \
-      "$YL" "$R" "$DIM" "$R" "$DIM" "$R" "$G1" "${VERSION:-?}" "$R"
-  fi
   local one="Install"; [ -n "$cur" ] && one="Update"
-  printf '  %s╭────────────────────────────────────╮%s\n' "$G4" "$R"
-  printf '  %s│%s  %s[1]%s %-30s %s│%s\n' "$G4" "$R" "$G1" "$R" "$one" "$G4" "$R"
-  printf '  %s│%s  %s[2]%s %-30s %s│%s\n' "$G4" "$R" "$G1" "$R" "Reinstall (force)" "$G4" "$R"
-  printf '  %s│%s  %s[3]%s %-30s %s│%s\n' "$G4" "$R" "$RD" "$R" "Uninstall" "$G4" "$R"
-  printf '  %s│%s  %s[4]%s %-30s %s│%s\n' "$G4" "$R" "$YL" "$R" "Build from source" "$G4" "$R"
-  printf '  %s│%s  %s[5]%s %-30s %s│%s\n' "$G4" "$R" "$DIM" "$R" "Help" "$G4" "$R"
-  printf '  %s│%s  %s[6]%s %-30s %s│%s\n' "$G4" "$R" "$DIM" "$R" "Quit" "$G4" "$R"
-  printf '  %s╰────────────────────────────────────╯%s\n\n' "$G4" "$R"
-  local c; c="$(ask "  Choose [1]: " "1")"
+  nl
+  line "╭──────────────────────────────────────────╮"
+  pad; printf '%s│%s  %sWhat would you like to do?%s               %s│%s\n' "$BX" "$R" "$BD$WH" "$R" "$BX" "$R"
+  line "│                                          │"
+  pad; printf '%s│%s  %s  1 %s● %s%-33s%s│%s\n' "$BX" "$R" "$G1" "$G3" "$WH" "$one" "$BX" "$R"
+  pad; printf '%s│%s  %s  2 %s● %s%-33s%s│%s\n' "$BX" "$R" "$G1" "$G2" "$WH" "Reinstall (force clean)" "$BX" "$R"
+  pad; printf '%s│%s  %s  3 %s● %s%-33s%s│%s\n' "$BX" "$R" "$RD" "$RD" "$WH" "Uninstall" "$BX" "$R"
+  pad; printf '%s│%s  %s  4 %s● %s%-33s%s│%s\n' "$BX" "$R" "$YL" "$YL" "$WH" "Build from source" "$BX" "$R"
+  pad; printf '%s│%s  %s  5 %s● %s%-33s%s│%s\n' "$BX" "$R" "$DIM" "$DIM" "$R" "Help & docs" "$BX" "$R"
+  pad; printf '%s│%s  %s  6 %s● %s%-33s%s│%s\n' "$BX" "$R" "$DIM" "$DIM" "$R" "Quit" "$BX" "$R"
+  line "│                                          │"
+  line "╰──────────────────────────────────────────╯"
+  nl
+  local c; c="$(ask "  Enter choice [1]: " "1")"
   case "$c" in
     1) ACTION="update" ;;
     2) ACTION="reinstall"; PVZGE_FORCE=1 ;;
     3) ACTION="uninstall" ;;
     4) ACTION="build" ;;
     5) show_help; menu; return ;;
-    6|q|Q) info "Bye!"; exit 0 ;;
-    *) warn "Unknown choice — defaulting to ${one}."; ACTION="update" ;;
+    6|q|Q) nl; info "See you later!"; nl; exit 0 ;;
+    *) warn "Invalid choice. Defaulting to ${one}."; ACTION="update" ;;
   esac
 }
 
-# ── main ────────────────────────────────────────────────────────────────────
+# ── main ─────────────────────────────────────────────────────────────────
 main() {
   require uname; require curl; require grep; require sed; require awk
   banner
@@ -548,20 +641,21 @@ main() {
     Linux)  PLATFORM="Linux" ;;
     *)      die "Unsupported OS: $OS (macOS and Linux only)." ;;
   esac
-  info "Detected ${PLATFORM} · ${ARCH}"
 
   ACTION="${PVZGE_ACTION:-}"
 
-  # Resolve the latest release up front (needed for menu/version compare).
-  # Uninstall doesn't need the network.
   if [ "$ACTION" != "uninstall" ]; then
-    step "Resolving release"; resolve_release; info "Release: ${VERSION}"
+    step "Connecting to GitHub"
+    resolve_release
+    ok "Release ${VERSION} found"
   fi
 
-  # No explicit action? Show the menu when interactive, else default to update/install.
+  # Show the system info card
+  sysinfo
+
   if [ -z "$ACTION" ]; then
     if [ "$INTERACTIVE" = "1" ]; then
-      step "Menu"; menu
+      menu
     else
       ACTION="update"
     fi
