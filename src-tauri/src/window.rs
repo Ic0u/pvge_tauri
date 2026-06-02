@@ -4,6 +4,7 @@ use tauri_plugin_notification::NotificationExt;
 use crate::error::Error;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
+const REPO: &str = "Ic0u/pvge_tauri";
 
 pub fn setup(app: &tauri::App, port: u16) -> Result<(), Error> {
     let url: tauri::Url = format!("http://127.0.0.1:{port}")
@@ -34,7 +35,94 @@ pub fn setup(app: &tauri::App, port: u16) -> Result<(), Error> {
             .show();
     }
 
+    spawn_update_check(app.handle().clone());
+
     Ok(())
+}
+
+// Background check against GitHub Releases. Uses the system `curl` (always present
+// on macOS and pulled in by the Linux build deps) so we add no HTTP/TLS crates.
+// On a newer release it fires a native notification — never blocks startup.
+fn spawn_update_check(handle: tauri::AppHandle) {
+    std::thread::spawn(move || {
+        let Some(latest) = fetch_latest_tag() else { return };
+        if version_is_newer(&latest, VERSION) {
+            let _ = handle
+                .notification()
+                .builder()
+                .title(format!("Update available · {latest}"))
+                .body(format!(
+                    "You're on v{VERSION}. Re-run the installer to update:\n\
+                     curl -fsSL https://raw.githubusercontent.com/{REPO}/main/install.sh | bash"
+                ))
+                .show();
+        }
+    });
+}
+
+fn fetch_latest_tag() -> Option<String> {
+    let url = format!("https://api.github.com/repos/{REPO}/releases/latest");
+    let output = std::process::Command::new("curl")
+        .args(["-fsSL", "--max-time", "8", "-H", "User-Agent: pvzge-desktop", &url])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let body = String::from_utf8_lossy(&output.stdout);
+    let after_key = body.split("\"tag_name\"").nth(1)?;
+    let start = after_key.find('"')? + 1;
+    let end = after_key[start..].find('"')? + start;
+    let tag = after_key[start..end].trim();
+    if tag.is_empty() {
+        None
+    } else {
+        Some(tag.to_string())
+    }
+}
+
+// Numeric, dot-separated comparison tolerant of a leading 'v' and trailing suffixes.
+fn version_is_newer(latest: &str, current: &str) -> bool {
+    fn parts(v: &str) -> Vec<u64> {
+        v.trim().trim_start_matches('v')
+            .split('.')
+            .map(|p| {
+                p.chars()
+                    .take_while(|c| c.is_ascii_digit())
+                    .collect::<String>()
+                    .parse()
+                    .unwrap_or(0)
+            })
+            .collect()
+    }
+    let (a, b) = (parts(latest), parts(current));
+    for i in 0..a.len().max(b.len()) {
+        let x = a.get(i).copied().unwrap_or(0);
+        let y = b.get(i).copied().unwrap_or(0);
+        if x != y {
+            return x > y;
+        }
+    }
+    false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::version_is_newer;
+
+    #[test]
+    fn detects_newer_versions() {
+        assert!(version_is_newer("v0.8.3", "0.8.2"));
+        assert!(version_is_newer("v1.0.0", "0.9.9"));
+        assert!(version_is_newer("0.8.10", "0.8.2"));
+    }
+
+    #[test]
+    fn ignores_same_or_older() {
+        assert!(!version_is_newer("v0.8.2", "0.8.2"));
+        assert!(!version_is_newer("v0.8.1", "0.8.2"));
+        assert!(!version_is_newer("v0.8.2-beta", "0.8.2"));
+    }
 }
 
 fn is_first_launch(app: &tauri::App) -> bool {

@@ -1,192 +1,355 @@
 #!/usr/bin/env bash
-# ──────────────────────────────────────────────────────────────
-#  PvZ2 Gardendless — macOS Installer
-#  curl -fsSL https://raw.githubusercontent.com/Ic0u/pvge_tauri/main/install.sh | bash
-# ──────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────
+#   PvZ2 Gardendless — one-line installer for macOS & Linux
+#
+#     curl -fsSL https://raw.githubusercontent.com/Ic0u/pvge_tauri/main/install.sh | bash
+#
+#   Env overrides:
+#     PVZGE_VERSION=v0.8.2   pin a specific release (default: latest)
+#     PVZGE_ARCH=universal   force a macOS variant: universal | x86_64 | arm64
+#     NO_COLOR=1             disable colored output
+# ──────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
+# ── Config ─────────────────────────────────────────────────────────────────
 REPO="Ic0u/pvge_tauri"
 APP_NAME="PvZ2 Gardendless"
-VERSION=""
-ASSET_URL=""
+APP_ID="com.pvzge.desktop"
+MIN_FREE_MB=2600                      # download (~1G) + extracted app (~1.1G) + slack
 
-# ── PvZ2 green palette (256-color) ────────────────────────────
-#  G1  lime glow   #afff00  color 154   — banner / highlights
-#  G2  vivid green #5fd700  color 76    — step headers
-#  G3  mid green   #00af00  color 34    — ok checkmarks
-#  G4  dark green  #005f00  color 22    — dim labels / credits
-#  WH  white bold            —          — values
-#  RD  red                   —          — errors
-#  YL  yellow                —          — warnings
-R='\033[0m'
-G1='\033[38;5;154m'   # lime glow
-G2='\033[38;5;76m'    # vivid green
-G3='\033[38;5;34m'    # mid green
-G4='\033[38;5;22m'    # dark green
-WH='\033[1;37m'
-RD='\033[1;31m'
-YL='\033[1;33m'
+# ── PvZ2 green palette (256-color) ─────────────────────────────────────────
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ] && command -v tput >/dev/null 2>&1 && [ "$(tput colors 2>/dev/null || echo 0)" -ge 256 ]; then
+  R=$'\033[0m';  G1=$'\033[38;5;154m'; G2=$'\033[38;5;76m'
+  G3=$'\033[38;5;34m'; G4=$'\033[38;5;28m'; WH=$'\033[1;37m'
+  RD=$'\033[1;31m'; YL=$'\033[38;5;220m'; DIM=$'\033[2m'
+  TTY=1
+else
+  R=''; G1=''; G2=''; G3=''; G4=''; WH=''; RD=''; YL=''; DIM=''
+  TTY=0
+fi
+
+# ── Output helpers ─────────────────────────────────────────────────────────
+info() { printf '%s  ▸%s %s%s%s\n'  "$G2" "$R" "$WH" "$*" "$R"; }
+ok()   { printf '%s  ✓%s %s%s%s\n'  "$G3" "$R" "$WH" "$*" "$R"; }
+warn() { printf '%s  !%s %s%s%s\n'  "$YL" "$R" "$WH" "$*" "$R"; }
+step() { printf '\n%s  ══ %s ══%s\n\n' "$G1" "$*" "$R"; }
+die()  { printf '\n%s  ✗ %s%s\n\n' "$RD" "$*" "$R" >&2; exit 1; }
 
 banner() {
-  printf "\n${G1}"
-  cat << 'BANNER'
-           ▄██▄
-          ██▀▀██       ██████╗ ██╗   ██╗███████╗██████╗
-         ██ ●  █      ██╔══██╗██║   ██║╚══███╔╝╚════██╗
-         █▄ ▿ ▄█      ██████╔╝██║   ██║  ███╔╝  █████╔╝
-          █▄▄▄█       ██╔═══╝ ╚██╗ ██╔╝ ███╔╝  ██╔═══╝
-         ▄█▓▓▓█▄      ██║      ╚████╔╝ ███████╗███████╗
-        ▀▀▀▀▀▀▀▀▀     ╚═╝       ╚═══╝  ╚══════╝╚══════╝
+  printf '\n%s' "$G1"
+  cat <<'BANNER'
+            ▄████▄
+          ▄█▀░░░░▀█▄        ██████╗ ██╗   ██╗███████╗██████╗
+         ██░ ●  ● ░██      ██╔══██╗██║   ██║╚══███╔╝╚════██╗
+         ██░  ▿▿  ░██      ██████╔╝██║   ██║  ███╔╝  █████╔╝
+          ▀█▄░▽▽░▄█▀       ██╔═══╝ ╚██╗ ██╔╝ ███╔╝  ██╔═══╝
+         ▄▄██▓▓▓▓██▄▄      ██║      ╚████╔╝ ███████╗███████╗
+        ▀▀▀▀▀▀▀▀▀▀▀▀▀▀     ╚═╝       ╚═══╝  ╚══════╝╚══════╝
 BANNER
-  printf "${G3}        Gardendless ${G4}— macOS port by Marcus Nguyen${R}\n"
-  printf "${G4}        github.com/Ic0u/pvge_tauri${R}\n\n"
+  printf '%s          G A R D E N L E S S%s\n'      "$G2"  "$R"
+  printf '%s     macOS / Linux port · Marcus Nguyen%s\n' "$G4" "$R"
+  printf '%s     github.com/%s%s\n\n'               "$DIM" "$REPO" "$R"
 }
 
-info() { printf "${G2}  ▸${R} ${WH}%s${R}\n" "$*"; }
-ok()   { printf "${G3}  ✓${R} ${WH}%s${R}\n" "$*"; }
-warn() { printf "${YL}  !${R} ${WH}%s${R}\n" "$*"; }
-err()  { printf "${RD}  ✗ %s${R}\n" "$*" >&2; exit 1; }
-step() { printf "\n${G1}  ══ %s ══${R}\n\n" "$*"; }
-
-banner
-
-# ── Detect OS ─────────────────────────────────────────────────
-OS="$(uname -s)"
-ARCH="$(uname -m)"
-
-case "$OS" in
-  Darwin)
-    case "$ARCH" in
-      x86_64) ASSET_ARCH="x86_64"  ;;
-      arm64)  ASSET_ARCH="aarch64" ;;
-      *)      err "Unsupported Mac architecture: $ARCH" ;;
-    esac
-    PLATFORM="macOS"
-    ;;
-  Linux)
-    case "$ARCH" in
-      x86_64)  ASSET_ARCH="amd64" ;;
-      aarch64) ASSET_ARCH="arm64" ;;
-      *)       err "Unsupported Linux architecture: $ARCH" ;;
-    esac
-    PLATFORM="Linux"
-    ;;
-  *)
-    err "Unsupported OS: $OS. This installer supports macOS and Linux."
-    ;;
-esac
-
-info "Platform: ${PLATFORM} (${ARCH})"
-
-# ── Fetch latest release ──────────────────────────────────────
-step "Resolving latest release"
-
-API="https://api.github.com/repos/${REPO}/releases/latest"
-RELEASE_JSON="$(curl -fsSL "$API" 2>/dev/null)" \
-  || err "Could not reach GitHub. Check your connection."
-
-VERSION="$(echo "$RELEASE_JSON" | grep '"tag_name"' | head -1 | sed 's/.*: "//;s/".*//')"
-[[ -n "$VERSION" ]] || err "No releases found at github.com/${REPO}"
-
-info "Latest release: ${VERSION}"
-
-if [[ "$OS" == "Darwin" ]]; then
-  ASSET_URL="$(echo "$RELEASE_JSON" \
-    | grep '"browser_download_url"' \
-    | grep "${ASSET_ARCH}" \
-    | grep -i "tar.gz" \
-    | head -1 \
-    | sed 's/.*: "//;s/".*//')"
-else
-  ASSET_URL="$(echo "$RELEASE_JSON" \
-    | grep '"browser_download_url"' \
-    | grep -iE "\.AppImage\"" \
-    | grep -i "${ASSET_ARCH}" \
-    | head -1 \
-    | sed 's/.*: "//;s/".*//')" || true
-
-  if [[ -z "$ASSET_URL" ]]; then
-    ASSET_URL="$(echo "$RELEASE_JSON" \
-      | grep '"browser_download_url"' \
-      | grep -iE "\.deb\"" \
-      | grep -i "${ASSET_ARCH}" \
-      | head -1 \
-      | sed 's/.*: "//;s/".*//')" || true
+# ── Spinner (wraps a slow command; degrades to plain wait on non-tty) ───────
+spin() {
+  local msg="$1"; shift
+  if [ "$TTY" = "0" ]; then
+    "$@"; return $?
   fi
-fi
+  local frames='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏' i=0 rc
+  "$@" &
+  local pid=$!
+  printf '\033[?25l'                                   # hide cursor
+  while kill -0 "$pid" 2>/dev/null; do
+    i=$(( (i + 1) % ${#frames} ))
+    printf '\r%s  %s%s %s%s%s' "$G2" "${frames:$i:1}" "$R" "$WH" "$msg" "$R"
+    sleep 0.08
+  done
+  if wait "$pid"; then rc=0; else rc=$?; fi
+  printf '\r\033[K\033[?25h'                           # clear line, show cursor
+  return "$rc"
+}
 
-[[ -n "$ASSET_URL" ]] || err "No ${PLATFORM} (${ARCH}) build found in ${VERSION}."
-ok "Found ${PLATFORM} ${ARCH} build"
+# ── Cleanup: always runs (temp dir, mounted DMG, cursor) ────────────────────
+TMP=""; MOUNTED_DMG=""
+cleanup() {
+  [ "$TTY" = "1" ] && printf '\033[?25h' 2>/dev/null || true
+  if [ -n "$MOUNTED_DMG" ] && [ -d "$MOUNTED_DMG" ]; then
+    hdiutil detach "$MOUNTED_DMG" -quiet 2>/dev/null \
+      || hdiutil detach "$MOUNTED_DMG" -force -quiet 2>/dev/null || true
+  fi
+  [ -n "$TMP" ] && rm -rf "$TMP" 2>/dev/null || true
+}
+trap cleanup EXIT
+trap 'die "Interrupted."' INT TERM
 
-# ── Download ──────────────────────────────────────────────────
-step "Downloading ${APP_NAME} ${VERSION}"
+# ── Preflight: required tools ───────────────────────────────────────────────
+require() { command -v "$1" >/dev/null 2>&1 || die "Missing required tool: $1"; }
 
-TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT
+# ── Resolve the right release asset URL from the GitHub API ─────────────────
+json_assets() { printf '%s' "$RELEASE_JSON" | grep -o '"browser_download_url"[^,]*' | sed 's/.*: *"//;s/".*//'; }
+pick()        { json_assets | grep -F "$1" | grep -i "${2}\$" | head -1; }
 
-FILENAME="$(basename "$ASSET_URL")"
-curl -fSL --progress-bar "$ASSET_URL" -o "${TMP}/${FILENAME}"
-echo ""
-ok "Download complete"
+resolve_release() {
+  local api
+  if [ -n "${PVZGE_VERSION:-}" ]; then
+    api="https://api.github.com/repos/${REPO}/releases/tags/${PVZGE_VERSION}"
+  else
+    api="https://api.github.com/repos/${REPO}/releases/latest"
+  fi
+  RELEASE_JSON="$(curl -fsSL --retry 3 --retry-delay 2 "$api" 2>/dev/null)" \
+    || die "Could not reach GitHub. Check your connection and try again."
+  VERSION="$(printf '%s' "$RELEASE_JSON" | grep '"tag_name"' | head -1 | sed 's/.*: *"//;s/".*//')"
+  [ -n "$VERSION" ] || die "No release found (${PVZGE_VERSION:-latest}) at github.com/${REPO}"
+}
 
-# ── Install ───────────────────────────────────────────────────
-step "Installing"
+# ── Disk-space guard ────────────────────────────────────────────────────────
+check_space() {
+  local target="$1" free_mb
+  free_mb="$(df -Pm "$target" 2>/dev/null | awk 'NR==2 {print $4}')" || free_mb=""
+  if [ -n "$free_mb" ] && [ "$free_mb" -lt "$MIN_FREE_MB" ]; then
+    die "Not enough free space on $target (${free_mb}MB free, need ~${MIN_FREE_MB}MB)."
+  fi
+}
 
-if [[ "$OS" == "Darwin" ]]; then
-  INSTALL_DIR="/Applications"
+# ── Download with resume + retry, then sanity-check the file ────────────────
+download() {
+  local url="$1" out="$2" name
+  name="$(basename "$url")"
+  step "Downloading  ·  ${VERSION}"
+  printf '%s    %s%s  %s(%s)%s\n\n' "$DIM" "$name" "$R" "$DIM" "$(human_size "$url")" "$R"
+  curl -fSL --retry 3 --retry-delay 2 --retry-connrefused -C - \
+       --progress-bar "$url" -o "$out" \
+    || die "Download failed. Re-run to resume where it left off."
+  [ -s "$out" ] || die "Downloaded file is empty."
+  echo ""
+  ok "Download complete"
+}
 
-  if [[ -d "${INSTALL_DIR}/${APP_NAME}.app" ]]; then
-    warn "Removing previous installation..."
-    rm -rf "${INSTALL_DIR}/${APP_NAME}.app"
+human_size() {
+  local name; name="\"$(basename "$1")\""
+  printf '%s' "$RELEASE_JSON" | awk -v n="$name" '
+    index($0, n) { found = 1 }
+    found && /"size":/ { gsub(/[^0-9]/, ""); print; exit }
+  ' | awk '{ if ($1 > 1073741824) printf "%.1f GB", $1/1073741824; else printf "%.0f MB", $1/1048576 }'
+}
+
+# ── Quit a running instance so we can replace it cleanly ────────────────────
+quit_if_running() {
+  if pgrep -f "$APP_NAME" >/dev/null 2>&1; then
+    info "Closing running instance..."
+    osascript -e "quit app \"$APP_NAME\"" 2>/dev/null || true
+    sleep 1
+    pkill -f "$APP_NAME.app" 2>/dev/null || true
+  fi
+}
+
+# ═══════════════════════════ macOS install ═════════════════════════════════
+install_macos() {
+  require hdiutil; require ditto; require curl
+
+  # Rosetta-aware arch detection
+  local arch="$ARCH"
+  [ "$(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0)" = "1" ] && arch="arm64"
+
+  # Universal first (runs on everything, dodges Rosetta edge cases), then native.
+  local url=""
+  case "${PVZGE_ARCH:-auto}" in
+    universal) url="$(pick 'macOS-Universal' '.dmg' || true)" ;;
+    x86_64)    url="$(pick 'macOS-x86_64' '.dmg' || true)" ;;
+    arm64)     url="$(pick 'macOS-Apple-Silicon' '.dmg' || true)" ;;
+    *)
+      url="$(pick 'macOS-Universal' '.dmg' || true)"
+      if [ -z "$url" ]; then
+        case "$arch" in
+          arm64)  url="$(pick 'macOS-Apple-Silicon' '.dmg' || true)" ;;
+          x86_64) url="$(pick 'macOS-x86_64' '.dmg' || true)" ;;
+        esac
+      fi
+      ;;
+  esac
+  [ -n "$url" ] || die "No macOS build found in ${VERSION}."
+  ok "Selected $(basename "$url")"
+
+  # Auto-update: skip if the installed version already matches latest
+  local dest="/Applications/${APP_NAME}.app"
+  if [ -z "${PVZGE_FORCE:-}" ] && [ -d "$dest" ]; then
+    local cur
+    cur="$(defaults read "${dest}/Contents/Info" CFBundleShortVersionString 2>/dev/null || true)"
+    if [ -n "$cur" ] && [ "v${cur}" = "${VERSION}" ]; then
+      ok "Already on the latest version (v${cur})"
+      info "Set PVZGE_FORCE=1 to reinstall anyway."
+      DONE_HINT="open -a \"${APP_NAME}\""
+      return 0
+    fi
+    [ -n "$cur" ] && info "Updating  v${cur}  →  ${VERSION}"
   fi
 
-  info "Extracting to ${INSTALL_DIR}..."
-  tar -xzf "${TMP}/${FILENAME}" -C "$INSTALL_DIR"
+  check_space "/Applications"
 
+  TMP="$(mktemp -d)"
+  local dmg="${TMP}/pvzge.dmg"
+  download "$url" "$dmg"
+
+  step "Installing"
+
+  # Mount read-only, no GUI, no autoplay
+  local out
+  out="$(hdiutil attach -nobrowse -noverify -noautoopen -readonly "$dmg" 2>/dev/null)" \
+    || die "Could not mount disk image (download may be corrupt — re-run to retry)."
+  MOUNTED_DMG="$(printf '%s' "$out" | grep -Eo '/Volumes/[^[:cntrl:]]*' | tail -1)"
+  [ -n "$MOUNTED_DMG" ] && [ -d "$MOUNTED_DMG" ] || die "Mounted image but found no volume."
+
+  local app_src
+  app_src="$(find "$MOUNTED_DMG" -maxdepth 1 -name '*.app' -print -quit 2>/dev/null || true)"
+  [ -n "$app_src" ] || die "No .app inside the disk image."
+
+  # Privilege only if /Applications isn't writable by us
+  local SUDO=""
+  if [ ! -w /Applications ]; then
+    SUDO="sudo"
+    info "Administrator access needed to write to /Applications"
+    sudo -v || die "Could not obtain administrator access."
+  fi
+
+  quit_if_running
+  if [ -d "$dest" ]; then
+    info "Removing previous installation..."
+    $SUDO rm -rf "$dest"
+  fi
+
+  spin "Copying ${APP_NAME} to /Applications" $SUDO ditto "$app_src" "$dest" \
+    || die "Copy failed."
+
+  hdiutil detach "$MOUNTED_DMG" -quiet 2>/dev/null || true
+  MOUNTED_DMG=""
+
+  [ -d "$dest/Contents/MacOS" ] || die "Install verification failed — bundle looks incomplete."
+  ok "Installed to ${dest}"
+
+  # Bypass Gatekeeper for the unsigned bundle
   info "Clearing Gatekeeper quarantine..."
-  sudo xattr -rd com.apple.quarantine "${INSTALL_DIR}/${APP_NAME}.app" 2>/dev/null || {
-    warn "Could not remove quarantine automatically."
-    warn "Go to System Settings → Privacy & Security → Open Anyway"
-  }
+  $SUDO xattr -dr com.apple.quarantine "$dest" 2>/dev/null \
+    || warn "Could not strip quarantine — if blocked: right-click ▸ Open, or System Settings ▸ Privacy & Security ▸ Open Anyway"
 
-  sudo rm -rf /Library/Caches/com.apple.iconservices.store 2>/dev/null || true
-  killall Finder 2>/dev/null || true
+  # Refresh icon cache (best-effort, never blocks on a password)
+  sudo -n rm -rf /Library/Caches/com.apple.iconservices.store 2>/dev/null || true
+  killall Finder Dock 2>/dev/null || true
 
-  ok "Installed to ${INSTALL_DIR}/${APP_NAME}.app"
+  DONE_HINT="open -a \"${APP_NAME}\""
+}
 
-else
-  if [[ "$FILENAME" == *.AppImage ]]; then
-    INSTALL_DIR="${HOME}/.local/bin"
-    mkdir -p "$INSTALL_DIR"
-    mv "${TMP}/${FILENAME}" "${INSTALL_DIR}/${FILENAME}"
-    chmod +x "${INSTALL_DIR}/${FILENAME}"
-    ok "Installed to ${INSTALL_DIR}/${FILENAME}"
-    info "Make sure ~/.local/bin is in your PATH"
-  elif [[ "$FILENAME" == *.deb ]]; then
-    info "Installing .deb package..."
-    sudo dpkg -i "${TMP}/${FILENAME}" || sudo apt-get install -f -y
-    ok "Installed via dpkg"
+# ═══════════════════════════ Linux install ═════════════════════════════════
+install_linux() {
+  require curl
+  [ "$ARCH" = "x86_64" ] || die "Only x86_64 Linux builds are available (yours: ${ARCH})."
+
+  local appimage deb url kind
+  appimage="$(pick 'Linux-x86_64' '.AppImage' || true)"
+  deb="$(pick 'Linux-x86_64' '.deb' || true)"
+
+  # Prefer .deb on Debian/Ubuntu (desktop entry + menu integration), else AppImage
+  if [ -n "$deb" ] && command -v dpkg >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1; then
+    url="$deb"; kind="deb"
+  elif [ -n "$appimage" ]; then
+    url="$appimage"; kind="appimage"
+  elif [ -n "$deb" ]; then
+    url="$deb"; kind="deb"
+  else
+    die "No Linux build found in ${VERSION}."
   fi
-fi
+  ok "Selected $(basename "$url")"
 
-# ── Done ──────────────────────────────────────────────────────
-printf "\n${G1}"
-cat << 'DONE'
-  ╔═════════════════════════════════════════╗
-  ║                                         ║
-  ║        Installation complete!  🌱       ║
-  ║                                         ║
-  ╚═════════════════════════════════════════╝
+  # Auto-update: skip if already on latest (tracked via version marker)
+  local marker="${HOME}/.local/share/pvzge/version"
+  if [ -z "${PVZGE_FORCE:-}" ] && [ -f "$marker" ] && [ "$(cat "$marker" 2>/dev/null)" = "${VERSION}" ]; then
+    ok "Already on the latest version (${VERSION})"
+    info "Set PVZGE_FORCE=1 to reinstall anyway."
+    DONE_HINT="PvZ2 Gardendless  (from your application menu)"
+    return 0
+  fi
+  [ -f "$marker" ] && info "Updating  $(cat "$marker" 2>/dev/null)  →  ${VERSION}"
+
+  TMP="$(mktemp -d)"
+  check_space "$TMP"
+  local file="${TMP}/$(basename "$url")"
+  download "$url" "$file"
+
+  step "Installing"
+  if [ "$kind" = "deb" ]; then
+    require sudo
+    spin "Installing package (dpkg)" sudo dpkg -i "$file" \
+      || { info "Resolving dependencies..."; sudo apt-get -y -f install; }
+    ok "Installed via dpkg"
+    DONE_HINT="pvzge   # or launch 'PvZ2 Gardendless' from your app menu"
+  else
+    local bindir="${HOME}/.local/bin"
+    local apps="${HOME}/.local/share/applications"
+    mkdir -p "$bindir" "$apps"
+    local target="${bindir}/PvZ2-Gardendless.AppImage"
+    mv "$file" "$target"
+    chmod +x "$target"
+    ok "Installed to ${target}"
+
+    # Desktop entry so it shows up in the launcher
+    cat > "${apps}/${APP_ID}.desktop" <<DESKTOP
+[Desktop Entry]
+Type=Application
+Name=${APP_NAME}
+Exec=${target}
+Icon=pvzge
+Categories=Game;
+Terminal=false
+DESKTOP
+    update-desktop-database "$apps" 2>/dev/null || true
+
+    case ":$PATH:" in
+      *":$bindir:"*) : ;;
+      *) warn "Add ~/.local/bin to your PATH to launch by name." ;;
+    esac
+    DONE_HINT="$target"
+  fi
+
+  # Record installed version for future update checks
+  mkdir -p "$(dirname "$marker")"
+  printf '%s' "${VERSION}" > "$marker" 2>/dev/null || true
+}
+
+# ── Final flourish ──────────────────────────────────────────────────────────
+finish() {
+  printf '\n%s' "$G1"
+  cat <<'DONE'
+   ╔══════════════════════════════════════════════╗
+   ║          🌱  Installed & ready!  🧟           ║
+   ╚══════════════════════════════════════════════╝
 DONE
-printf "${R}\n"
+  printf '%s\n' "$R"
+  info "Launch it with:"
+  printf '\n      %s%s%s\n\n' "$G2" "${DONE_HINT:-}" "$R"
+  printf '%s  Game by Gaozih & the PvZ2 Gardendless Team%s\n' "$DIM" "$R"
+  printf '%s  %s port by Marcus Nguyen ❤️%s\n\n' "$DIM" "$PLATFORM" "$R"
+}
 
-if [[ "$OS" == "Darwin" ]]; then
-  info "Open from Launchpad, Spotlight, or run:"
-  printf "\n    ${G4}open \"/Applications/${APP_NAME}.app\"${R}\n"
-else
-  info "Run from terminal:"
-  printf "\n    ${G4}${FILENAME}${R}\n"
-fi
+# ── main ────────────────────────────────────────────────────────────────────
+main() {
+  require uname; require curl; require grep; require sed; require awk
+  banner
 
-printf "\n${G4}  Game by Gaozih & the PvZ2 Gardendless Team${R}\n"
-printf "${G4}  macOS port by Marcus Nguyen ❤️${R}\n\n"
+  OS="$(uname -s)"; ARCH="$(uname -m)"
+  case "$OS" in
+    Darwin) PLATFORM="macOS" ;;
+    Linux)  PLATFORM="Linux" ;;
+    *)      die "Unsupported OS: $OS (macOS and Linux only)." ;;
+  esac
+  info "Detected ${PLATFORM} · ${ARCH}"
+
+  step "Resolving release"
+  resolve_release
+  info "Release: ${VERSION}"
+
+  if [ "$OS" = "Darwin" ]; then install_macos; else install_linux; fi
+  finish
+}
+
+main "$@"

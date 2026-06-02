@@ -46,6 +46,23 @@ You can also grab the latest build manually from [Releases](https://github.com/I
 
 > macOS builds are unsigned. If Gatekeeper blocks the app, open it via **System Settings > Privacy & Security**.
 
+## Updating
+
+The app checks GitHub for new releases on launch and posts a native notification when an update is available. To update, just re-run the one-line installer — it reads your installed version and only reinstalls when something newer exists:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Ic0u/pvge_tauri/main/install.sh | bash
+```
+
+Installer environment overrides:
+
+| Variable | Effect |
+| --- | --- |
+| `PVZGE_FORCE=1` | Reinstall even if already on the latest version |
+| `PVZGE_VERSION=v0.8.2` | Install a specific release instead of latest |
+| `PVZGE_ARCH=universal` | Force a macOS variant: `universal`, `x86_64`, or `arm64` |
+| `NO_COLOR=1` | Disable colored output |
+
 ## Build from Source
 
 **Requirements:** Rust stable, Node.js, [Tauri CLI v2](https://v2.tauri.app), Git
