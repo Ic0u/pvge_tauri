@@ -39,9 +39,8 @@ impl AssetServer {
         let server =
             tiny_http::Server::http(bind_addr).map_err(|e| Error::ServerBind(e.to_string()))?;
 
-        let addr = match server.server_addr() {
-            tiny_http::ListenAddr::IP(addr) => addr,
-            _ => return Err(Error::ServerBind("invalid server address".into())),
+        let tiny_http::ListenAddr::IP(addr) = server.server_addr() else {
+            return Err(Error::ServerBind("invalid server address".into()));
         };
         let server = Arc::new(server);
 
@@ -122,7 +121,7 @@ fn handle_request(req: tiny_http::Request, docs_dir: &Path) {
         .headers()
         .iter()
         .find(|h| h.field.as_str().as_str().eq_ignore_ascii_case("Origin"))
-        .map(|h| h.value.as_str().as_str());
+        .map(|h| h.value.as_str());
 
     if let Some(origin) = origin_header {
         if is_local_origin(origin) {
@@ -162,12 +161,14 @@ fn serve_file(docs_dir: &Path, path: &Path) -> tiny_http::Response<Box<dyn std::
         .unwrap_or_default()
         .to_ascii_lowercase();
 
-    let file = match std::fs::File::open(&resolved) {
-        Ok(f) => f,
-        Err(_) => return make_response(404, vec![], Box::new(std::io::empty()), Some(0)),
+    let Ok(file) = std::fs::File::open(&resolved) else {
+        return make_response(404, vec![], Box::new(std::io::empty()), Some(0));
     };
 
-    let file_len = file.metadata().map(|m| m.len() as usize).ok();
+    let file_len = file
+        .metadata()
+        .ok()
+        .and_then(|m| usize::try_from(m.len()).ok());
 
     let mime = content_type(&resolved);
     let mut headers =
