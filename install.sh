@@ -42,8 +42,15 @@ fi
 # ── TUI primitives ──────────────────────────────────────────────────────
 ln()    { printf '%s' "$R"; }                          # reset inline
 nl()    { echo ""; }
-pad()   { printf '  '; }                               # left gutter
-line()  { pad; printf '%s%s%s\n' "$BX" "$1" "$R"; }   # draw a full-width box line
+# Centering: compute left margin for a given content width
+COLS="$(tput cols 2>/dev/null || echo 80)"
+cpad() { # cpad <width> — prints spaces to center content of given width
+  local w="${1:-44}"
+  local margin=$(( (COLS - w) / 2 ))
+  [ "$margin" -gt 0 ] && printf "%${margin}s" "" || true
+}
+pad()   { cpad 44; }                                    # default 44-char box gutter
+line()  { pad; printf '%s%s%s\n' "$BX" "$1" "$R"; }
 divider() {
   pad; printf '%s──────────────────────────────────────────%s\n' "$BX" "$R"
 }
@@ -76,8 +83,10 @@ confirm() {
 
 # ── Banner (peashooter + colored game title) ─────────────────────────────
 banner() {
+  local pi; pi="$(cpad 55)"
   printf '\n%s' "$G1"
-  cat <<'PEA'
+  # Indent each peashooter line for centering via sed
+  sed "s/^/${pi}/" <<'PEA'
 ⠀⠀⠀⠀⠀⣀⣀⣀⡀⠀⠀⠀⠀⠀⠀⠀⢀⣀⡤⠴⠖⠒⠒⠒⢒⠒⠶⠤⣤⣀
 ⠀⠀⢀⣴⠻⣉⢏⣽⣿⣗⣦⠀⠀⢀⡶⠞⠋⠅⠐⠀⢀⠐⠠⠈⠄⠌⠠⢡⢀⠊⠝⡲⣄
 ⠀⢠⡿⣼⣣⣼⣿⣿⣿⣿⢳⣝⡷⢋⠄⠈⢀⠄⠈⡀⠂⠌⠠⣑⣈⣄⠃⠢⢌⢸⡶⣥⣊⠽⣦⡀⠀⠀⣀⣠⣤⣀⡀
@@ -103,30 +112,36 @@ banner() {
 ⠀⠀⠀⠀⠀⠀⢸⡳⣌⣛⢦⢳⡹⢤⠳⣍⠶⣙⣾⡟⠹⣷⣧⢚⡵⣊⢧⡹⣌⢏⡞⣱⢋⡖⣻
 ⠀⠀⠀⠀⠀⠀⠘⢷⡜⡜⣎⠳⣜⢣⡛⣬⢳⣽⠞⠀⠀⠈⠛⠿⣶⣭⣖⣣⢝⠮⡜⣥⠯⠞⠋
 PEA
+  # PLANTS (green, includes S) · VS (yellow) · ZOMBIES (grey) · 2 (orange)
   printf '%s%s' "$R" "$BD"
-  printf '%s█████▄ ▄▄     ▄▄▄  ▄▄  ▄▄ ▄▄▄▄▄▄%s ' "$G1" "$R"
-  printf '%s%s▄▄▄▄   ▄▄ ▄▄  ▄▄▄▄%s    '           "$BD" "$YL" "$R"
-  printf '%s██████  ▄▄▄  ▄▄   ▄▄ ▄▄▄▄  ▄▄ ▄▄▄▄▄  ▄▄▄▄%s   '  "$GY" "$R"
-  printf '%s████▄%s\n'                               "$OG" "$R"
-  printf '%s██▄▄█▀ ██    ██▀██ ███▄██   ██  ███▄▄%s ' "$G1" "$R"
-  printf '%s%s██▄██ ███▄▄%s      '                     "$BD" "$YL" "$R"
-  printf '%s▄▄▀▀  ██▀██ ██▀▄▀██ ██▄██ ██ ██▄▄  ███▄▄%s    '  "$GY" "$R"
-  printf '%s▄██▀%s\n'                                 "$OG" "$R"
-  printf '%s██     ██▄▄▄ ██▀██ ██ ▀██   ██  ▄▄██▀%s ' "$G1" "$R"
-  printf '%s%s ▀█▀  ▄▄██▀ ▄%s   '                      "$BD" "$YL" "$R"
-  printf '%s██████ ▀███▀ ██   ██ ██▄█▀ ██ ██▄▄▄ ▄▄██▀%s   '  "$GY" "$R"
-  printf '%s███▄▄%s\n'                                "$OG" "$R"
+  printf '%s█████▄ ▄▄     ▄▄▄  ▄▄  ▄▄ ▄▄▄▄▄▄ ▄▄▄▄%s   ' "$G1" "$R"
+  printf '%s▄▄ ▄▄  ▄▄▄▄%s     '                            "$YL" "$R"
+  printf '%s██████  ▄▄▄  ▄▄   ▄▄ ▄▄▄▄  ▄▄ ▄▄▄▄▄  ▄▄▄▄%s   ' "$GY" "$R"
+  printf '%s████▄%s\n'                                      "$OG" "$R"
+  printf '%s██▄▄█▀ ██    ██▀██ ███▄██   ██  ███▄▄%s   '    "$G1" "$R"
+  printf '%s██▄██ ███▄▄%s      '                             "$YL" "$R"
+  printf '%s▄▄▀▀  ██▀██ ██▀▄▀██ ██▄██ ██ ██▄▄  ███▄▄%s    ' "$GY" "$R"
+  printf '%s▄██▀%s\n'                                       "$OG" "$R"
+  printf '%s██     ██▄▄▄ ██▀██ ██ ▀██   ██  ▄▄██▀%s    '   "$G1" "$R"
+  printf '%s▀█▀  ▄▄██▀ ▄%s   '                               "$YL" "$R"
+  printf '%s██████ ▀███▀ ██   ██ ██▄█▀ ██ ██▄▄▄ ▄▄██▀%s   ' "$GY" "$R"
+  printf '%s███▄▄%s\n'                                      "$OG" "$R"
   nl
-  printf '           %s▄████   ▄▄▄  ▄▄▄▄%s'          "$YL" "$R"
-  printf '%s  ▄▄▄▄  ▄▄▄▄▄%s'                         "$Y2" "$R"
-  printf '%s ▄▄  ▄▄ ▄▄    ▄▄▄▄▄  ▄▄▄▄  ▄▄▄▄%s\n'   "$Y3" "$R"
-  printf '          %s██  ▄▄▄ ██▀██ ██▄█▄%s'         "$YL" "$R"
-  printf '%s ██▀██ ██▄▄%s'                             "$Y2" "$R"
-  printf '%s  ███▄██ ██    ██▄▄  ███▄▄ ███▄▄%s\n'    "$Y3" "$R"
-  printf '           %s▀███▀  ██▀██ ██ ██%s'          "$YL" "$R"
-  printf '%s ████▀ ██▄▄▄%s'                            "$Y2" "$R"
-  printf '%s ██ ▀██ ██▄▄▄ ██▄▄▄ ▄▄██▀ ▄▄██▀%s\n'    "$Y3" "$R"
+  # GARDENLESS — yellow→orange gradient (GARD | ENL | ESS)
+  local gi; gi="$(cpad 63)"
+  printf '%s%s▄████   ▄▄▄  ▄▄▄▄  ▄▄▄▄  %s' "$gi" "$YL" "$R"
+  printf '%s▄▄▄▄▄ ▄▄  ▄▄ ▄▄    %s'          "$Y2" "$R"
+  printf '%s▄▄▄▄▄  ▄▄▄▄  ▄▄▄▄%s\n'          "$Y3" "$R"
+  printf '%s%s██  ▄▄▄ ██▀██ ██▄█▄ ██▀██ %s'  "$gi" "$YL" "$R"
+  printf '%s██▄▄  ███▄██ ██    %s'             "$Y2" "$R"
+  printf '%s██▄▄  ███▄▄ ███▄▄%s\n'            "$Y3" "$R"
+  printf '%s%s ▀███▀  ██▀██ ██ ██ ████▀ %s'   "$gi" "$YL" "$R"
+  printf '%s██▄▄▄ ██ ▀██ ██▄▄▄ %s'             "$Y2" "$R"
+  printf '%s██▄▄▄ ▄▄██▀ ▄▄██▀%s\n'            "$Y3" "$R"
   nl
+  local si; si="$(cpad 42)"
+  printf '%s%smacOS / Linux port · Marcus Nguyen%s\n'  "$si" "$G4" "$R"
+  printf '%s%sgithub.com/%s%s\n\n'                     "$si" "$DIM" "$REPO" "$R"
 }
 
 # ── System info card (shown after banner) ────────────────────────────────
