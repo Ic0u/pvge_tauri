@@ -4,7 +4,7 @@
 
 # PvZ2 Gardendless Port
 
-A native desktop wrapper for **PvZ2 Gardendless**, packaged with **Tauri**. For people who doesnt give a fuck bout docker
+A native desktop wrapper for **PvZ2 Gardendless**, packaged with **Tauri**. For people who doesnt give a fuck bout docker container.
 
 [![Release](https://img.shields.io/github/v/release/Ic0u/pvge_tauri?style=flat-square&color=blue)](https://github.com/Ic0u/pvge_tauri/releases)
 [![Build](https://img.shields.io/github/actions/workflow/status/Ic0u/pvge_tauri/release.yml?style=flat-square&label=build)](https://github.com/Ic0u/pvge_tauri/actions/workflows/release.yml)
