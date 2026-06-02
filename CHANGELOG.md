@@ -2,18 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-## [0.8.3] - 2026-06-02
-
-### Added
-- **New Plants:** Asparagus, Pineapple, Anthurium.
-- **New Zombies & Machines:** Battleplane, Transport Boat, Double-Cabin Aircraft, Lightning Gun, Imp Paratrooper, Airborne Gargantuar.
-- **New Levels:** Aerial Fortress Levels.
-- **New Deck Recommendations:** Recommended & Challenging Card Decks for Aerial Fortress.
-- **Unit Tests:** Added suite covering request path decoding, parent-path traversal prevention, WASM MIME mapping, update notifications, and CORS origin validation.
-- **CI Pipeline Automation:** Integrated automated Clippy, cargo test, and cargo audit checks into the GitHub Release action.
+## [0.8.2 build#2] - 2026-06-02
 
 ### Fixed
 - **Game Save Loss (Critical):** Configured local HTTP server to bind to a preferred fixed port (`21073`) instead of generating a random port each launch. This keeps the WebView's origin stable and permanently preserves game save data stored in `localStorage` across restarts.
