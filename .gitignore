@@ -16,7 +16,6 @@ src-tauri/.DS_Store
 /src-tauri/gen/apple/
 
 # ai help :))
-/.claude
 /.brain/
 /.gemini/
 /docs/reports/
