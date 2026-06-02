@@ -61,10 +61,11 @@ jobs:
         working-directory: src-tauri
         run: cargo test
 
+      - name: Install Cargo Audit
+        run: cargo install cargo-audit --locked
+
       - name: Run Security Audit
-        uses: rustsec/audit-check@v2
-        with:
-          token: ${{ github.token }}
+        run: cargo audit --file src-tauri/Cargo.lock
 
   macos:
     name: Build ${{ matrix.label }}
