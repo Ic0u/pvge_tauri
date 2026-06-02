@@ -1,6 +1,6 @@
 [package]
 name = "pvzge"
-version = "0.8.2"
+version = "0.8.3"
 description = "PvZ2 Gardendless - Desktop Edition"
 authors = ["Gaozih", "Marcus Nguyen"]
 edition = "2021"
@@ -14,8 +14,8 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }
 # OS-level notifications (macOS Notification Center, Linux libnotify)
 tauri-plugin-notification = { version = "2", default-features = false }
-# Sync HTTP file server — serves the 1.1 GB game assets from disk
-rouille = { version = "3", default-features = false }
+# Tiny and extremely lightweight HTTP server with zero unmaintained dependencies
+tiny_http = "0.12.0"
 # Safe URL path decoding for local asset requests
 percent-encoding = "2"
 

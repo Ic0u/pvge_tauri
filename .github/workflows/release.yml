@@ -9,14 +9,50 @@ on:
       tag:
         description: Release tag to create or update
         required: true
-        default: v0.8.2
+        default: v0.8.3-build2
 
 permissions:
   contents: write
 
 jobs:
+  check:
+    name: Code Quality & Security Check
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Rust
+        run: |
+          rustup update stable
+          rustup default stable
+          rustup component add clippy
+
+      - name: Cache Cargo Dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run Clippy
+        working-directory: src-tauri
+        run: cargo clippy -- -W clippy::all -W clippy::pedantic -D warnings
+
+      - name: Run Tests
+        working-directory: src-tauri
+        run: cargo test
+
+      - name: Run Security Audit
+        uses: rustsec/audit-check@v2
+        with:
+          token: ${{ github.token }}
+
   macos:
     name: Build ${{ matrix.label }}
+    needs: check
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -72,6 +108,7 @@ jobs:
 
   linux:
     name: Build Linux x86_64
+    needs: check
     runs-on: ubuntu-24.04
 
     steps:
