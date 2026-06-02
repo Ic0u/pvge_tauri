@@ -42,7 +42,8 @@ You can also grab the latest build manually from [Releases](https://github.com/I
 | macOS Intel | `PvZ2-Gardendless-macOS-x86_64.dmg` |
 | macOS Apple Silicon | `PvZ2-Gardendless-macOS-Apple-Silicon.dmg` |
 | macOS Universal | `PvZ2-Gardendless-macOS-Universal.dmg` |
-| Linux x86_64 | `.deb` / `.AppImage` |
+| Linux x86_64 | `.deb` / `.rpm` / `.AppImage` |
+| Linux ARM_64 | `coming soon` |
 
 > macOS builds are unsigned. If Gatekeeper blocks the app, open it via **System Settings > Privacy & Security**.
 
