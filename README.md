@@ -1,43 +1,68 @@
-# PvZ2 Gardendless Tauri
+<div align="center">
 
-Native desktop packaging for **PvZ2 Gardendless** using Tauri.
+<img width="20%" src="src-tauri/icons/source.webp" alt="PvZ2 Gardendless icon">
 
-This repository keeps only the compiled game build in `docs/`, the Tauri wrapper in `src-tauri/`, and GitHub release automation for desktop packages.
+# PvZ2 Gardendless Tauri Versions
 
-## Releases
+Native desktop builds for people who want to play without pulling a Docker container just to run a game.
 
-GitHub Releases are built from version tags such as `v0.8.2`.
+Grab the latest build from the [Releases](https://github.com/Ic0u/pvge_tauri/releases) tab.
 
-Release builds include:
+</div>
 
-- `PvZ2-Gardendless-macOS-x86_64.dmg`
-- `PvZ2-Gardendless-macOS-Apple-Silicon.dmg`
-- `PvZ2-Gardendless-macOS-Universal.dmg`
+## Release Files
+
+Each tagged release builds real desktop packages. For macOS, the release should contain three `.dmg` files:
+
+- `PvZ2-Gardendless-macOS-x86_64.dmg` for Intel Macs.
+- `PvZ2-Gardendless-macOS-Apple-Silicon.dmg` for M1/M2/M3/M4 Macs.
+- `PvZ2-Gardendless-macOS-Universal.dmg` for both Intel and Apple Silicon.
+
+Linux builds are also included:
+
 - `PvZ2-Gardendless-Linux-x86_64.deb`
 - `PvZ2-Gardendless-Linux-x86_64.AppImage`
 
-Download builds from:
+The release workflow does not publish a website build. It builds desktop release files and uploads them to GitHub Releases.
 
-https://github.com/Ic0u/pvge_tauri/releases
+## Warning: GPU Acceleration
 
-macOS builds are unsigned and not notarized. If Gatekeeper blocks the app, approve it from **System Settings > Privacy & Security** or remove quarantine manually after downloading.
+If you want the best GPU acceleration on Linux or macOS, running the Windows version through Proton may still perform better.
+
+Chromium/WebKit WebGL behavior on Linux and macOS can be inconsistent, especially on Wayland. See the upstream tracking issue:
+
+https://github.com/Gzh0821/pvzg_site/issues/85
+
+If you are using the Wine Wayland driver or Crossover, starting the Windows `.exe` with this flag may help:
+
+```bash
+--in-process-gpu
+```
+
+## Audio Issue
+
+If sound effects do not work, open the in-game settings and set:
+
+```text
+Audio Load Mode = DOM
+```
 
 ## Build Locally
 
-Run the desktop wrapper:
+Run the Tauri wrapper:
 
 ```bash
 cargo run --manifest-path src-tauri/Cargo.toml
 ```
 
-Build a local macOS app and DMG:
+Build a local macOS DMG:
 
 ```bash
 cd src-tauri
-cargo tauri build --bundles app,dmg
+cargo tauri build --bundles dmg
 ```
 
-Build a specific macOS target:
+Build specific macOS DMGs:
 
 ```bash
 cd src-tauri
@@ -48,10 +73,11 @@ cargo tauri build --target universal-apple-darwin --bundles dmg
 
 ## Repository Layout
 
-- `docs/`: compiled PvZ2 Gardendless web assets used by the desktop app.
-- `src-tauri/`: Rust/Tauri desktop wrapper.
-- `.github/workflows/release.yml`: builds release packages and uploads them to GitHub Releases.
+- `docs/`: compiled PvZ2 Gardendless game assets.
+- `src-tauri/`: Tauri desktop wrapper.
+- `.github/workflows/release.yml`: builds macOS and Linux packages for GitHub Releases.
 
-## Credits
+## Related Projects
 
-PvZ2 Gardendless is created by Gaozih and contributors. This repository packages the compiled build as a Tauri desktop app.
+- [Android version](https://github.com/Cateners/gardendless-android)
+- [PvZ2 Gardendless upstream site](https://github.com/Gzh0821/pvzg_site)
