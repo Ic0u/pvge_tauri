@@ -45,7 +45,11 @@ You can also grab the latest build manually from [Releases](https://github.com/I
 | Linux x86_64 | `.deb` / `.rpm` / `.AppImage` |
 | Linux ARM_64 | `coming soon` |
 
-> macOS builds are unsigned. If Gatekeeper blocks the app, open it via **System Settings > Privacy & Security**.
+> [!TIP]
+> macOS builds are currently unsigned. If Gatekeeper blocks the app from launching, you can bypass it instantly by opening your Terminal and running:
+> ```bash
+> xattr -cr "/Applications/PvZ2 Gardendless.app"
+> ```
 
 ## Updating
 
