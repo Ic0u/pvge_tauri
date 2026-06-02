@@ -158,17 +158,20 @@ jobs:
 
       - name: Build Linux packages
         working-directory: src-tauri
-        run: tauri build --bundles deb,appimage
+        run: tauri build --bundles deb,appimage,rpm
 
       - name: Rename Linux packages
         run: |
           mkdir -p release
           deb="$(find src-tauri/target/release/bundle/deb -name "*.deb" -print -quit)"
           appimage="$(find src-tauri/target/release/bundle/appimage -name "*.AppImage" -print -quit)"
+          rpm="$(find src-tauri/target/release/bundle/rpm -name "*.rpm" -print -quit)"
           test -n "$deb"
           test -n "$appimage"
+          test -n "$rpm"
           cp "$deb" release/PvZ2-Gardendless-Linux-x86_64.deb
           cp "$appimage" release/PvZ2-Gardendless-Linux-x86_64.AppImage
+          cp "$rpm" release/PvZ2-Gardendless-Linux-x86_64.rpm
           ls -lh release
 
       - name: Upload Linux artifact
@@ -179,6 +182,7 @@ jobs:
           path: |
             release/PvZ2-Gardendless-Linux-x86_64.deb
             release/PvZ2-Gardendless-Linux-x86_64.AppImage
+            release/PvZ2-Gardendless-Linux-x86_64.rpm
 
   release:
     name: Publish GitHub Release
