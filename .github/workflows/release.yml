@@ -49,11 +49,11 @@ jobs:
           rustup target add ${{ matrix.rust_targets }}
 
       - name: Install Tauri CLI
-        run: cargo install tauri-cli --version "^2" --locked
+        run: npm install -g @tauri-apps/cli@2
 
       - name: Build DMG
         working-directory: src-tauri
-        run: cargo tauri build --target "${{ matrix.target }}" --bundles dmg
+        run: tauri build --target "${{ matrix.target }}" --bundles dmg
 
       - name: Rename DMG
         run: |
@@ -100,11 +100,11 @@ jobs:
           rustup default stable
 
       - name: Install Tauri CLI
-        run: cargo install tauri-cli --version "^2" --locked
+        run: npm install -g @tauri-apps/cli@2
 
       - name: Build Linux packages
         working-directory: src-tauri
-        run: cargo tauri build --bundles deb,appimage
+        run: tauri build --bundles deb,appimage
 
       - name: Rename Linux packages
         run: |
