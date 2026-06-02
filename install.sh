@@ -37,18 +37,35 @@ die()  { printf '\n%s  ✗ %s%s\n\n' "$RD" "$*" "$R" >&2; exit 1; }
 
 banner() {
   printf '\n%s' "$G1"
-  cat <<'BANNER'
-            ▄████▄
-          ▄█▀░░░░▀█▄        ██████╗ ██╗   ██╗███████╗██████╗
-         ██░ ●  ● ░██      ██╔══██╗██║   ██║╚══███╔╝╚════██╗
-         ██░  ▿▿  ░██      ██████╔╝██║   ██║  ███╔╝  █████╔╝
-          ▀█▄░▽▽░▄█▀       ██╔═══╝ ╚██╗ ██╔╝ ███╔╝  ██╔═══╝
-         ▄▄██▓▓▓▓██▄▄      ██║      ╚████╔╝ ███████╗███████╗
-        ▀▀▀▀▀▀▀▀▀▀▀▀▀▀     ╚═╝       ╚═══╝  ╚══════╝╚══════╝
-BANNER
-  printf '%s          G A R D E N L E S S%s\n'      "$G2"  "$R"
-  printf '%s     macOS / Linux port · Marcus Nguyen%s\n' "$G4" "$R"
-  printf '%s     github.com/%s%s\n\n'               "$DIM" "$REPO" "$R"
+  cat <<'PEA'
+⠀⠀⠀⠀⠀⣀⣀⣀⡀⠀⠀⠀⠀⠀⠀⠀⢀⣀⡤⠴⠖⠒⠒⠒⢒⠒⠶⠤⣤⣀
+⠀⠀⢀⣴⠻⣉⢏⣽⣿⣗⣦⠀⠀⢀⡶⠞⠋⠅⠐⠀⢀⠐⠠⠈⠄⠌⠠⢡⢀⠊⠝⡲⣄
+⠀⢠⡿⣼⣣⣼⣿⣿⣿⣿⢳⣝⡷⢋⠄⠈⢀⠄⠈⡀⠂⠌⠠⣑⣈⣄⠃⠢⢌⢸⡶⣥⣊⠽⣦⡀⠀⠀⣀⣠⣤⣀⡀
+⠀⣸⣳⢹⣿⣿⣿⡿⡿⠓⣠⠏⡀⠁⠀⡀⠡⢀⠂⠄⡡⢈⡾⠙⢿⣿⣮⡵⣈⢹⣀⣿⣿⡖⣌⢻⡄⡠⢖⠋⠣⢈⣀⢈⡩⢓⢄
+⠀⢻⡬⣿⣿⣿⠟⠁⠀⢰⠃⠌⠀⠀⠌⡀⢁⠂⢌⠂⡅⢂⣧⣀⣸⣿⣿⣿⡠⢍⡝⡿⢿⣉⠖⡬⠋⠔⢉⣴⢚⣭⣬⣧⣽⡣⣍⢷
+⠀⠸⣗⣿⡿⠀⠀⠀⠀⡏⠰⠀⠀⠰⢀⠐⠠⠊⢄⢊⠰⣁⠚⢿⣿⣿⣿⢟⡋⢖⡸⣐⢣⡜⡘⢁⠐⡲⢏⣶⣿⣿⣿⣿⣽⣻⣆⠧⡇
+⠀⠀⠹⣿⣷⠀⠀⠀⣸⡟⠠⡀⠀⠠⢀⢊⠐⡁⢎⠠⢃⠦⣉⠦⣅⠻⣃⢧⡙⢆⡳⣌⢣⠼⢁⠢⣱⡙⣾⣿⣿⣿⣿⣿⣿⣳⢿⡘⡅
+⠀⠀⠀⠀⠀⠀⠀⠀⠸⡇⠀⡈⠄⠄⠌⡄⢊⠰⣈⢌⢣⢒⡡⠲⣌⢣⡓⢦⡙⣎⠶⣡⢏⡒⠌⢆⢧⣹⣿⣿⣿⣿⣿⣿⣿⢯⣿⡐⡇
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⣧⠈⣄⠐⡈⠔⣀⢃⠒⡌⠆⢎⢢⡑⠳⣌⢳⡘⣣⢝⣢⢛⡴⢣⢍⡚⡜⣢⢽⣿⣿⣿⣿⣿⣿⣿⣻⠆⣱⠃
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠘⣧⠘⡷⢦⣂⠰⣈⠒⣌⠸⢌⠦⣙⡱⢜⡢⡝⢦⢫⡔⣣⢜⡣⢎⡵⣸⢡⠞⣿⣿⣿⣿⣿⣟⡾⢣⣸⠃
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢘⣧⡈⢳⣭⢻⣴⢡⣦⣃⣮⣜⣤⢳⣡⢳⡙⣎⣵⣘⣦⣋⣶⣩⣽⣇⡞⣜⢲⣙⢻⠙⡞⡁⣔⣷⠁
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠻⣶⣙⠿⣯⣿⡾⣽⢷⢯⣿⣯⢿⢯⣿⣝⣷⣟⣾⣻⣶⡿⠛⠙⠻⣿⣷⣛⣮⣿⣶⠿⠋
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣋⢿⣿⣎⣙⠻⡟⢏⡟⡾⣏⡟⡞⢷⢋⢷⣹⣶⠿⠋
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠘⢿⣿⣿⣿⣾⣶⣾⣴⢬⠮⠽⠖⠛⠋⠉
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣟⡻⠿⣿⠿⠿⠋
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢸⡇⠉⣓⡏⡆
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢸⡀⠀⢧⡏⡅
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠸⡇⠀⡧⣧⠇
+⠀⠀⠀⠀⠀⠀⠀⠀⣴⣿⣿⡿⣿⣿⣷⣦⣷⠁⢹⣹⣴⣾⣿⣿⣿⣿⣷
+⠀⠀⠀⠀⠀⠀⠀⠀⢼⣿⣯⣿⣿⣾⣟⣿⣿⣇⡊⠵⢿⣿⣳⣿⣾⣟⣿⣇
+⠀⠀⠀⠀⠀⠀⠀⢀⡼⢫⢍⣰⣠⢬⠭⢿⣿⣿⣎⡉⡞⢿⣿⣷⡿⠿⠭⡭⣍⣫⢙⡛⣢⣄
+⠀⠀⠀⠀⠀⠀⢀⡿⣌⠣⢆⡇⡓⣎⡱⢃⢦⡙⢿⣶⣽⡿⢫⡔⢎⡵⢣⡑⣎⢒⠧⡱⢆⡭⢧
+⠀⠀⠀⠀⠀⠀⢸⡳⣌⣛⢦⢳⡹⢤⠳⣍⠶⣙⣾⡟⠹⣷⣧⢚⡵⣊⢧⡹⣌⢏⡞⣱⢋⡖⣻
+⠀⠀⠀⠀⠀⠀⠘⢷⡜⡜⣎⠳⣜⢣⡛⣬⢳⣽⠞⠀⠀⠈⠛⠿⣶⣭⣖⣣⢝⠮⡜⣥⠯⠞⠋
+PEA
+  printf '%s        P v Z 2   G a r d e n l e s s%s\n'   "$G2" "$R"
+  printf '%s      macOS / Linux port · Marcus Nguyen%s\n' "$G4" "$R"
+  printf '%s      github.com/%s%s\n\n'                  "$DIM" "$REPO" "$R"
 }
 
 # ── Spinner (wraps a slow command; degrades to plain wait on non-tty) ───────
@@ -119,9 +136,11 @@ download() {
   name="$(basename "$url")"
   step "Downloading  ·  ${VERSION}"
   printf '%s    %s%s  %s(%s)%s\n\n' "$DIM" "$name" "$R" "$DIM" "$(human_size "$url")" "$R"
-  curl -fSL --retry 3 --retry-delay 2 --retry-connrefused -C - \
+  # --retry-all-errors so transient TCP resets (curl error 56) auto-retry;
+  # -C - resumes the partial file across those retries.
+  curl -fSL --retry 5 --retry-delay 2 --retry-all-errors --retry-connrefused -C - \
        --progress-bar "$url" -o "$out" \
-    || die "Download failed. Re-run to resume where it left off."
+    || die "Download failed after multiple attempts. Re-run the installer to try again."
   [ -s "$out" ] || die "Downloaded file is empty."
   echo ""
   ok "Download complete"
@@ -283,6 +302,7 @@ install_linux() {
       || { info "Resolving dependencies..."; sudo apt-get -y -f install; }
     ok "Installed via dpkg"
     DONE_HINT="pvzge   # or launch 'PvZ2 Gardendless' from your app menu"
+    LAUNCH_BIN="$(command -v pvzge 2>/dev/null || echo pvzge)"
   else
     local bindir="${HOME}/.local/bin"
     local apps="${HOME}/.local/share/applications"
@@ -309,6 +329,7 @@ DESKTOP
       *) warn "Add ~/.local/bin to your PATH to launch by name." ;;
     esac
     DONE_HINT="$target"
+    LAUNCH_BIN="$target"
   fi
 
   # Record installed version for future update checks
@@ -325,10 +346,23 @@ finish() {
    ╚══════════════════════════════════════════════╝
 DONE
   printf '%s\n' "$R"
-  info "Launch it with:"
+  info "Relaunch any time with:"
   printf '\n      %s%s%s\n\n' "$G2" "${DONE_HINT:-}" "$R"
   printf '%s  Game by Gaozih & the PvZ2 Gardendless Team%s\n' "$DIM" "$R"
   printf '%s  %s port by Marcus Nguyen ❤️%s\n\n' "$DIM" "$PLATFORM" "$R"
+}
+
+# Auto-open the game once it's installed (set PVZGE_NO_LAUNCH=1 to skip).
+launch_app() {
+  [ -n "${PVZGE_NO_LAUNCH:-}" ] && return 0
+  info "Opening ${APP_NAME}..."
+  if [ "$OS" = "Darwin" ]; then
+    open -a "${APP_NAME}" 2>/dev/null \
+      || open "/Applications/${APP_NAME}.app" 2>/dev/null || true
+  elif [ -n "${LAUNCH_BIN:-}" ]; then
+    ( setsid "${LAUNCH_BIN}" >/dev/null 2>&1 & ) 2>/dev/null \
+      || ( "${LAUNCH_BIN}" >/dev/null 2>&1 & ) 2>/dev/null || true
+  fi
 }
 
 # ── main ────────────────────────────────────────────────────────────────────
@@ -350,6 +384,7 @@ main() {
 
   if [ "$OS" = "Darwin" ]; then install_macos; else install_linux; fi
   finish
+  launch_app
 }
 
 main "$@"
