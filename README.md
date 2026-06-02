@@ -21,7 +21,21 @@ A native desktop wrapper for **PvZ2 Gardendless**, packaged with **Tauri**. For 
 
 ## Download
 
-Grab the latest build from [Releases](https://github.com/Ic0u/pvge_tauri/releases):
+### One-line installer
+
+Run the installer from Terminal:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Ic0u/pvge_tauri/main/install.sh | bash
+```
+
+The installer fetches the latest GitHub Release, detects your platform and CPU architecture, downloads the matching build, and installs it automatically.
+
+On macOS, it installs `PvZ2 Gardendless.app` into `/Applications`, removes the quarantine flag, and refreshes the Finder icon cache.
+
+### Manual download
+
+You can also grab the latest build manually from [Releases](https://github.com/Ic0u/pvge_tauri/releases):
 
 | Platform | File |
 | --- | --- |
