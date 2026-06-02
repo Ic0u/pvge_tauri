@@ -1,0 +1,167 @@
+name: Build Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to create or update
+        required: true
+        default: v0.8.2
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    name: Build ${{ matrix.label }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: macOS x86_64
+            runner: macos-15-intel
+            target: x86_64-apple-darwin
+            rust_targets: x86_64-apple-darwin
+            dmg_name: PvZ2-Gardendless-macOS-x86_64.dmg
+          - label: macOS Apple Silicon
+            runner: macos-15
+            target: aarch64-apple-darwin
+            rust_targets: aarch64-apple-darwin
+            dmg_name: PvZ2-Gardendless-macOS-Apple-Silicon.dmg
+          - label: macOS Universal
+            runner: macos-15
+            target: universal-apple-darwin
+            rust_targets: x86_64-apple-darwin aarch64-apple-darwin
+            dmg_name: PvZ2-Gardendless-macOS-Universal.dmg
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Rust
+        run: |
+          rustup update stable
+          rustup default stable
+          rustup target add ${{ matrix.rust_targets }}
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2" --locked
+
+      - name: Build DMG
+        working-directory: src-tauri
+        run: cargo tauri build --target "${{ matrix.target }}" --bundles dmg
+
+      - name: Rename DMG
+        run: |
+          mkdir -p release
+          dmg="$(find "src-tauri/target/${{ matrix.target }}/release/bundle/dmg" -name "*.dmg" -print -quit)"
+          test -n "$dmg"
+          cp "$dmg" "release/${{ matrix.dmg_name }}"
+          ls -lh release
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.dmg_name }}
+          if-no-files-found: error
+          path: release/${{ matrix.dmg_name }}
+
+  linux:
+    name: Build Linux x86_64
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            curl \
+            file \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libsoup-3.0-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            patchelf \
+            wget
+
+      - name: Configure Rust
+        run: |
+          rustup update stable
+          rustup default stable
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2" --locked
+
+      - name: Build Linux packages
+        working-directory: src-tauri
+        run: cargo tauri build --bundles deb,appimage
+
+      - name: Rename Linux packages
+        run: |
+          mkdir -p release
+          deb="$(find src-tauri/target/release/bundle/deb -name "*.deb" -print -quit)"
+          appimage="$(find src-tauri/target/release/bundle/appimage -name "*.AppImage" -print -quit)"
+          test -n "$deb"
+          test -n "$appimage"
+          cp "$deb" release/PvZ2-Gardendless-Linux-x86_64.deb
+          cp "$appimage" release/PvZ2-Gardendless-Linux-x86_64.AppImage
+          ls -lh release
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PvZ2-Gardendless-Linux-x86_64
+          if-no-files-found: error
+          path: |
+            release/PvZ2-Gardendless-Linux-x86_64.deb
+            release/PvZ2-Gardendless-Linux-x86_64.AppImage
+
+  release:
+    name: Publish GitHub Release
+    runs-on: ubuntu-24.04
+    needs:
+      - macos
+      - linux
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Publish release assets
+        run: |
+          find dist -maxdepth 2 -type f -print -exec ls -lh {} \;
+
+          assets=()
+          while IFS= read -r -d '' file; do
+            assets+=("$file")
+          done < <(find dist -type f -print0)
+
+          if [ "${#assets[@]}" -eq 0 ]; then
+            echo "No release assets found" >&2
+            exit 1
+          fi
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
+          else
+            gh release create "$RELEASE_TAG" "${assets[@]}" \
+              --target "$GITHUB_SHA" \
+              --title "PvZ2 Gardendless $RELEASE_TAG" \
+              --notes "Unsigned PvZ2 Gardendless desktop builds for macOS and Linux."
+          fi

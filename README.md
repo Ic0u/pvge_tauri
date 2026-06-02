@@ -1,34 +1,57 @@
-<div align="center">
+# PvZ2 Gardendless Tauri
 
-<img width=20% src="https://pvzge.com/pvz_logo-round.webp" alt="">
+Native desktop packaging for **PvZ2 Gardendless** using Tauri.
 
-# PvZ2 Gardendless
+This repository keeps only the compiled game build in `docs/`, the Tauri wrapper in `src-tauri/`, and GitHub release automation for desktop packages.
 
-**An endless garden requires an endless defense!**
+## Releases
 
-Thanks to everyone who has supported this project!
+GitHub Releases are built from version tags such as `v0.8.2`.
 
-![](https://img.shields.io/badge/author-Gaozih-%2366ccff)
-![](https://img.shields.io/github/license/Gzh0821/pvzge_web)
-![](https://img.shields.io/docker/pulls/gaozih/pvzge)
-![](https://img.shields.io/discord/1265377295846346803?label=discord)
-![](https://img.shields.io/github/stars/Gzh0821/pvzge_web)
-</div>
+Release builds include:
 
-### Info
+- `PvZ2-Gardendless-macOS-x86_64.dmg`
+- `PvZ2-Gardendless-macOS-Apple-Silicon.dmg`
+- `PvZ2-Gardendless-macOS-Universal.dmg`
+- `PvZ2-Gardendless-Linux-x86_64.deb`
+- `PvZ2-Gardendless-Linux-x86_64.AppImage`
 
-This is the open source repo of the web version of "PvZ2 Gardendless".
+Download builds from:
 
-"PvZ2 Gardendless" is a rewritten "Plants vs Zombies 2" entirely using only Web technologies(including the cocos engine)!
+https://github.com/Ic0u/pvge_tauri/releases
 
-Visit our [website](https://pvzge.com/en/) for download links, game guides and more. You can also report bugs, make comments and suggestions in the feedback module of the website or in the issues and discussions of this project!
+macOS builds are unsigned and not notarized. If Gatekeeper blocks the app, approve it from **System Settings > Privacy & Security** or remove quarantine manually after downloading.
 
-## Web Play
+## Build Locally
 
-Try PvZ2 Gardendless online in [here](https://play.pvzge.com/) !
+Run the desktop wrapper:
 
-- Note: The version for online play may not be the latest version and may load slowly. For more related issues, please refer to the relevant instructions on the official website
+```bash
+cargo run --manifest-path src-tauri/Cargo.toml
+```
 
-## Using Docker
+Build a local macOS app and DMG:
 
-Deploy the game locally by using [Docker image](https://hub.docker.com/r/gaozih/pvzge)
+```bash
+cd src-tauri
+cargo tauri build --bundles app,dmg
+```
+
+Build a specific macOS target:
+
+```bash
+cd src-tauri
+cargo tauri build --target x86_64-apple-darwin --bundles dmg
+cargo tauri build --target aarch64-apple-darwin --bundles dmg
+cargo tauri build --target universal-apple-darwin --bundles dmg
+```
+
+## Repository Layout
+
+- `docs/`: compiled PvZ2 Gardendless web assets used by the desktop app.
+- `src-tauri/`: Rust/Tauri desktop wrapper.
+- `.github/workflows/release.yml`: builds release packages and uploads them to GitHub Releases.
+
+## Credits
+
+PvZ2 Gardendless is created by Gaozih and contributors. This repository packages the compiled build as a Tauri desktop app.
