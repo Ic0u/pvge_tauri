@@ -27,9 +27,16 @@ MARKER="${HOME}/.local/share/pvzge/version"
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ] && command -v tput >/dev/null 2>&1 && [ "$(tput colors 2>/dev/null || echo 0)" -ge 256 ]; then
   R=$'\033[0m';  G1=$'\033[38;5;154m'; G2=$'\033[38;5;76m'
   G3=$'\033[38;5;34m'; G4=$'\033[38;5;28m'; WH=$'\033[1;37m'
-  RD=$'\033[1;31m'; YL=$'\033[38;5;220m'; DIM=$'\033[2m'; TTY=1
+  RD=$'\033[1;31m'; YL=$'\033[38;5;220m'; DIM=$'\033[2m'
+  OG=$'\033[38;5;208m'          # orange (number 2)
+  GY=$'\033[38;5;245m'          # grey   (zombies)
+  Y2=$'\033[38;5;214m'          # yellow-orange (gardenless gradient)
+  Y3=$'\033[38;5;208m'          # deep orange   (gardenless gradient end)
+  BD=$'\033[1m'                 # bold
+  TTY=1
 else
-  R=''; G1=''; G2=''; G3=''; G4=''; WH=''; RD=''; YL=''; DIM=''; TTY=0
+  R=''; G1=''; G2=''; G3=''; G4=''; WH=''; RD=''; YL=''; DIM=''
+  OG=''; GY=''; Y2=''; Y3=''; BD=''; TTY=0
 fi
 
 # ── Output helpers ──────────────────────────────────────────────────────────
@@ -86,7 +93,32 @@ banner() {
 ⠀⠀⠀⠀⠀⠀⢸⡳⣌⣛⢦⢳⡹⢤⠳⣍⠶⣙⣾⡟⠹⣷⣧⢚⡵⣊⢧⡹⣌⢏⡞⣱⢋⡖⣻
 ⠀⠀⠀⠀⠀⠀⠘⢷⡜⡜⣎⠳⣜⢣⡛⣬⢳⣽⠞⠀⠀⠈⠛⠿⣶⣭⣖⣣⢝⠮⡜⣥⠯⠞⠋
 PEA
-  printf '%s        P v Z 2   G a r d e n l e s s%s\n'   "$G2" "$R"
+  # PLANTS in green, VS in yellow, ZOMBIES in grey, 2 in orange
+  printf '%s%s' "$R" "$BD"
+  printf '%s█████▄ ▄▄     ▄▄▄  ▄▄  ▄▄ ▄▄▄▄▄▄%s ' "$G1" "$R"
+  printf '%s%s▄▄▄▄   ▄▄ ▄▄  ▄▄▄▄%s    '           "$BD" "$YL" "$R"
+  printf '%s██████  ▄▄▄  ▄▄   ▄▄ ▄▄▄▄  ▄▄ ▄▄▄▄▄  ▄▄▄▄%s   '  "$GY" "$R"
+  printf '%s████▄%s\n'                               "$OG" "$R"
+  printf '%s██▄▄█▀ ██    ██▀██ ███▄██   ██  ███▄▄%s ' "$G1" "$R"
+  printf '%s%s██▄██ ███▄▄%s      '                     "$BD" "$YL" "$R"
+  printf '%s▄▄▀▀  ██▀██ ██▀▄▀██ ██▄██ ██ ██▄▄  ███▄▄%s    '  "$GY" "$R"
+  printf '%s▄██▀%s\n'                                 "$OG" "$R"
+  printf '%s██     ██▄▄▄ ██▀██ ██ ▀██   ██  ▄▄██▀%s ' "$G1" "$R"
+  printf '%s%s ▀█▀  ▄▄██▀ ▄%s   '                      "$BD" "$YL" "$R"
+  printf '%s██████ ▀███▀ ██   ██ ██▄█▀ ██ ██▄▄▄ ▄▄██▀%s   '  "$GY" "$R"
+  printf '%s███▄▄%s\n'                                "$OG" "$R"
+  echo ""
+  # GARDENLESS in yellow→orange gradient
+  printf '           %s▄████   ▄▄▄  ▄▄▄▄%s'          "$YL" "$R"
+  printf '%s  ▄▄▄▄  ▄▄▄▄▄%s'                         "$Y2" "$R"
+  printf '%s ▄▄  ▄▄ ▄▄    ▄▄▄▄▄  ▄▄▄▄  ▄▄▄▄%s\n'   "$Y3" "$R"
+  printf '          %s██  ▄▄▄ ██▀██ ██▄█▄%s'         "$YL" "$R"
+  printf '%s ██▀██ ██▄▄%s'                             "$Y2" "$R"
+  printf '%s  ███▄██ ██    ██▄▄  ███▄▄ ███▄▄%s\n'    "$Y3" "$R"
+  printf '           %s▀███▀  ██▀██ ██ ██%s'          "$YL" "$R"
+  printf '%s ████▀ ██▄▄▄%s'                            "$Y2" "$R"
+  printf '%s ██ ▀██ ██▄▄▄ ██▄▄▄ ▄▄██▀ ▄▄██▀%s\n'    "$Y3" "$R"
+  echo ""
   printf '%s      macOS / Linux port · Marcus Nguyen%s\n' "$G4" "$R"
   printf '%s      github.com/%s%s\n\n'                  "$DIM" "$REPO" "$R"
 }
@@ -453,9 +485,9 @@ HELP
 finish() {
   printf '\n%s' "$G1"
   cat <<'DONE'
-   ╔══════════════════════════════════════════════╗
-   ║          🌱  Installed & ready!  🧟           ║
-   ╚══════════════════════════════════════════════╝
+   ╭──────────────────────────────────────────────╮
+   │          🌱  Installed & ready!  🧟           │
+   ╰──────────────────────────────────────────────╯
 DONE
   printf '%s\n' "$R"
   info "Relaunch any time with:"
@@ -485,12 +517,14 @@ menu() {
       "$YL" "$R" "$DIM" "$R" "$DIM" "$R" "$G1" "${VERSION:-?}" "$R"
   fi
   local one="Install"; [ -n "$cur" ] && one="Update"
-  printf '   %s[1]%s %s\n'  "$G1" "$R" "$one"
-  printf '   %s[2]%s Reinstall (force re-download)\n' "$G1" "$R"
-  printf '   %s[3]%s Uninstall\n' "$G1" "$R"
-  printf '   %s[4]%s Build from source\n' "$G1" "$R"
-  printf '   %s[5]%s Help\n' "$G1" "$R"
-  printf '   %s[6]%s Quit\n\n' "$G1" "$R"
+  printf '  %s╭────────────────────────────────────╮%s\n' "$G4" "$R"
+  printf '  %s│%s  %s[1]%s %-30s %s│%s\n' "$G4" "$R" "$G1" "$R" "$one" "$G4" "$R"
+  printf '  %s│%s  %s[2]%s %-30s %s│%s\n' "$G4" "$R" "$G1" "$R" "Reinstall (force)" "$G4" "$R"
+  printf '  %s│%s  %s[3]%s %-30s %s│%s\n' "$G4" "$R" "$RD" "$R" "Uninstall" "$G4" "$R"
+  printf '  %s│%s  %s[4]%s %-30s %s│%s\n' "$G4" "$R" "$YL" "$R" "Build from source" "$G4" "$R"
+  printf '  %s│%s  %s[5]%s %-30s %s│%s\n' "$G4" "$R" "$DIM" "$R" "Help" "$G4" "$R"
+  printf '  %s│%s  %s[6]%s %-30s %s│%s\n' "$G4" "$R" "$DIM" "$R" "Quit" "$G4" "$R"
+  printf '  %s╰────────────────────────────────────╯%s\n\n' "$G4" "$R"
   local c; c="$(ask "  Choose [1]: " "1")"
   case "$c" in
     1) ACTION="update" ;;
