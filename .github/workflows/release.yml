@@ -157,10 +157,11 @@ jobs:
             exit 1
           fi
 
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --clobber
           else
             gh release create "$RELEASE_TAG" "${assets[@]}" \
+              --repo "$GITHUB_REPOSITORY" \
               --target "$GITHUB_SHA" \
               --title "PvZ2 Gardendless $RELEASE_TAG" \
               --notes "Unsigned PvZ2 Gardendless desktop builds for macOS and Linux."
