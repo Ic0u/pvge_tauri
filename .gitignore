@@ -15,7 +15,8 @@ src-tauri/.DS_Store
 /src-tauri/gen/android/
 /src-tauri/gen/apple/
 
-# AWF & Audit files
+# ai help :))
+/.claude
 /.brain/
 /.gemini/
 /docs/reports/
