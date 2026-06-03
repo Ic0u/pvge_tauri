@@ -222,7 +222,7 @@ confirm() {
 confirm_destructive() {
   if [ "$INTERACTIVE" = 0 ]; then
     [ -n "${PVZGE_YES:-}" ] && return 0
-    bad "Set PVZGE_YES=1 to confirm full wipe."
+    bad "Set PVZGE_YES=1 to remove the game."
     return 1
   fi
   confirm "$@"
@@ -325,7 +325,7 @@ wipe_linux_game_data() {
 }
 wipe_game_data() {
   [ "$OS" = Darwin ] && wipe_macos_game_data || wipe_linux_game_data
-  good "Local game data wiped"
+  good "Old game data removed"
 }
 is_installed() {
   [ "$OS" = Darwin ] && has_macos_game_data && return 0
@@ -351,84 +351,32 @@ pick_macos_dmg() {
   esac
   printf '%s' "$url"
 }
-download_connections() {
-  local n="${PVZGE_CONNECTIONS:-8}"
-  case "$n" in ''|*[!0-9]*) n=8 ;; esac
-  [ "$n" -lt 1 ] && n=1
-  [ "$n" -gt 16 ] && n=16
-  printf '%s' "$n"
-}
 download_backend() {
   local wanted="${PVZGE_DOWNLOADER:-auto}"
   case "$wanted" in
     aria2|aria2c) command -v aria2c >/dev/null 2>&1 && printf 'aria2c' || printf 'curl' ;;
-    curl-parallel|parallel) printf 'curl-parallel' ;;
     curl) printf 'curl' ;;
-    auto|'') command -v aria2c >/dev/null 2>&1 && printf 'aria2c' || printf 'curl-parallel' ;;
-    *) command -v aria2c >/dev/null 2>&1 && printf 'aria2c' || printf 'curl-parallel' ;;
+    auto|'') command -v aria2c >/dev/null 2>&1 && printf 'aria2c' || printf 'curl' ;;
+    *) command -v aria2c >/dev/null 2>&1 && printf 'aria2c' || printf 'curl' ;;
   esac
 }
 curl_download() {
   local url="$1" dest="$2"
   curl -fSL --retry 5 --retry-all-errors -C - --progress-bar "$url" -o "$dest"
 }
-curl_parallel_download() {
-  local url="$1" dest="$2" connections="$3"
-  local headers size ranges chunk start end idx parts_dir pids pid rc actual
-  headers="$(curl -fsIL --retry 3 "$url" 2>/dev/null || true)"
-  size="$(printf '%s\n' "$headers" | awk 'tolower($1)=="content-length:"{gsub("\r","",$2); n=$2} END{print n}')"
-  ranges="$(printf '%s\n' "$headers" | awk 'tolower($1)=="accept-ranges:"{gsub("\r","",$2); r=tolower($2)} END{print r}')"
-  case "$size" in ''|*[!0-9]*) return 2 ;; esac
-  [ "$ranges" = bytes ] || return 2
-  [ "$size" -gt 8388608 ] || return 2
-  [ "$connections" -gt 1 ] || return 2
-
-  parts_dir="${dest}.parts.$$"
-  rm -rf "$parts_dir" 2>/dev/null || true
-  mkdir -p "$parts_dir" || return 1
-  chunk=$(( (size + connections - 1) / connections ))
-  start=0; idx=0; pids=""
-  while [ "$start" -lt "$size" ]; do
-    end=$(( start + chunk - 1 ))
-    [ "$end" -ge "$size" ] && end=$(( size - 1 ))
-    curl -fL --retry 5 --retry-all-errors -sS -r "${start}-${end}" "$url" -o "${parts_dir}/${idx}" &
-    pids="${pids} $!"
-    idx=$((idx+1))
-    start=$((end+1))
-  done
-
-  rc=0
-  for pid in $pids; do
-    wait "$pid" || rc=1
-  done
-  [ "$rc" = 0 ] || { rm -rf "$parts_dir" 2>/dev/null || true; return 1; }
-
-  : > "$dest" || { rm -rf "$parts_dir" 2>/dev/null || true; return 1; }
-  idx=0
-  while [ "$idx" -lt "$connections" ] && [ -f "${parts_dir}/${idx}" ]; do
-    cat "${parts_dir}/${idx}" >> "$dest" || rc=1
-    idx=$((idx+1))
-  done
-  rm -rf "$parts_dir" 2>/dev/null || true
-  [ "$rc" = 0 ] || return 1
-  actual="$(wc -c < "$dest" | tr -d ' ')"
-  [ "$actual" = "$size" ] || return 1
-}
 aria2_download() {
-  local url="$1" dest="$2" connections="$3"
+  local url="$1" dest="$2"
   aria2c \
     --allow-overwrite=true \
     --auto-file-renaming=false \
     --continue=true \
     --file-allocation=none \
-    --max-connection-per-server="$connections" \
-    --split="$connections" \
-    --min-split-size=1M \
     --max-tries=5 \
     --retry-wait=2 \
     --timeout=30 \
     --connect-timeout=20 \
-    --summary-interval=0 \
+    --summary-interval=1 \
+    --show-console-readout=true \
     --console-log-level=warn \
     -d "$(dirname "$dest")" \
     -o "$(basename "$dest")" \
@@ -436,31 +384,22 @@ aria2_download() {
 }
 download_asset() {
   local url="$1" dest="$2"
-  local backend connections requested
+  local backend requested
   requested="${PVZGE_DOWNLOADER:-auto}"
   backend="$(download_backend)"
-  case "$requested" in auto|aria2|aria2c|curl|curl-parallel|parallel|'') ;; *) bad "Unknown downloader: $requested; using $backend";; esac
+  case "$requested" in auto|aria2|aria2c|curl|'') ;; *) bad "Unknown downloader: $requested; using $backend";; esac
   phase_detail "Package" "$(basename "$url")"
   phase_detail "Size" "$(human_size "$url")"
   if [ "$backend" = aria2c ]; then
-    connections="$(download_connections)"
-    phase_detail "Method" "aria2c · ${connections} connections"
-  elif [ "$backend" = curl-parallel ]; then
-    connections="$(download_connections)"
-    phase_detail "Method" "curl · ${connections} ranges"
+    phase_detail "Method" "aria2c · progress"
   else
-    phase_detail "Method" "curl · resumable"
+    phase_detail "Method" "curl · progress bar"
     case "$requested" in aria2|aria2c) bad "aria2c unavailable; using curl";; esac
   fi
   msg "Downloading package"
   if [ "$backend" = aria2c ]; then
-    aria2_download "$url" "$dest" "$connections" || {
-      bad "Parallel download failed; using curl"
-      curl_download "$url" "$dest" || return 1
-    }
-  elif [ "$backend" = curl-parallel ]; then
-    curl_parallel_download "$url" "$dest" "$connections" || {
-      bad "Parallel range unavailable; using curl"
+    aria2_download "$url" "$dest" || {
+      bad "aria2c failed; using curl"
       curl_download "$url" "$dest" || return 1
     }
   else
@@ -477,7 +416,7 @@ install_macos() {
   phase_detail "Version" "$VERSION"
   phase_detail "Platform" "$PLATFORM · $ARCH"
   phase_detail "Target" "/Applications/${APP}.app"
-  [ "${ACTION:-}" = reinstall ] && phase_detail "Clean" "Full local data wipe"
+  [ "${ACTION:-}" = reinstall ] && phase_detail "Mode" "Fresh install"
   local dest="/Applications/${APP}.app"
   if [ -z "${PVZGE_FORCE:-}" ] && [ "${ACTION:-}" != reinstall ] && [ -d "$dest" ]; then
     local cur; cur="$(installed_version)"
@@ -500,7 +439,7 @@ install_macos() {
   phase_step "4/4" "Install game"
   local S=""; [ ! -w /Applications ] && { S=sudo; sudo -v || return 1; }
   quit_if_running
-  [ "${ACTION:-}" = reinstall ] && { msg "Wiping local game data"; wipe_game_data; }
+  [ "${ACTION:-}" = reinstall ] && { msg "Cleaning old data"; wipe_game_data; }
   [ -d "$dest" ] && $S rm -rf "$dest"
   spin "Installing" $S ditto "$app_src" "$dest" || return 1
   hdiutil detach "$MOUNTED_DMG" -quiet 2>/dev/null; MOUNTED_DMG=""
@@ -519,14 +458,14 @@ install_linux() {
   phase_detail "Version" "$VERSION"
   phase_detail "Format" "$kind"
   phase_detail "Platform" "$PLATFORM · $ARCH"
-  [ "${ACTION:-}" = reinstall ] && phase_detail "Clean" "Full local data wipe"
+  [ "${ACTION:-}" = reinstall ] && phase_detail "Mode" "Fresh install"
   if [ -z "${PVZGE_FORCE:-}" ] && [ "${ACTION:-}" != reinstall ] && [ -f "$MARKER" ] && [ "$(cat "$MARKER")" = "$VERSION" ]; then good "Already up to date ($VERSION)"; return 0; fi
   echo ""
   phase_step "2/3" "Download package"
   TMP="$(mktemp -d)"; download_asset "$url" "$TMP/pkg" || return 1
   echo ""
   phase_step "3/3" "Install package"
-  [ "${ACTION:-}" = reinstall ] && { msg "Wiping local game data"; wipe_game_data; }
+  [ "${ACTION:-}" = reinstall ] && { msg "Cleaning old data"; wipe_game_data; }
   if [ "$kind" = deb ]; then spin "Installing" sudo dpkg -i "$TMP/pkg" || { sudo apt-get -yf install || return 1; }
     DONE_HINT=pvzge; LAUNCH_BIN="$(command -v pvzge 2>/dev/null || echo pvzge)"
   else mkdir -p "${HOME}/.local/bin"; local t="${HOME}/.local/bin/PvZ2-Gardendless.AppImage"
@@ -535,27 +474,26 @@ install_linux() {
   mkdir -p "$(dirname "$MARKER")"; printf '%s' "$VERSION" >"$MARKER" 2>/dev/null || true
 }
 uninstall() {
-  is_installed || { bad "No install or leftovers found."; return 0; }
-  phase_step "1/3" "Review removal targets"
+  is_installed || { bad "Nothing to remove."; return 0; }
+  phase_step "1/3" "Review"
   if [ "$OS" = Darwin ]; then
     phase_detail "Game" "/Applications/${APP}.app"
-    phase_detail "Data" "WebKit, caches, prefs, saved state"
-    phase_detail "Trace" "Cookies, HTTP storage, logs, markers"
+    phase_detail "Data" "Saved data and leftovers"
   else
     phase_detail "Game" "${HOME}/.local/bin/PvZ2-Gardendless.AppImage"
-    phase_detail "Data" "config, cache, local share, desktop files"
+    phase_detail "Data" "Saved data and shortcuts"
   fi
   echo ""
-  phase_step "2/3" "Confirm full wipe"
-  confirm_destructive "Fully remove ${APP} and local game data? [y/N]" "N" || { msg "Cancelled."; return 0; }; echo ""
+  phase_step "2/3" "Confirm removal"
+  confirm_destructive "Remove ${APP} completely? [y/N]" "N" || { msg "Cancelled."; return 0; }; echo ""
   phase_step "3/3" "Remove files"
-  msg "Removing game and all local data"
+  msg "Removing game"
   if [ "$OS" = Darwin ]; then quit_if_running; local S=""; [ ! -w /Applications ] && { S=sudo; sudo -v || return 1; }
     $S rm -rf "/Applications/${APP}.app"
     wipe_game_data
   else command -v dpkg >/dev/null && dpkg -s pvzge >/dev/null 2>&1 && sudo apt-get -y remove pvzge 2>/dev/null || true
     wipe_game_data; fi
-  good "${APP} fully removed."
+  good "${APP} removed."
 }
 build_from_source() {
   phase_step "1/4" "Check toolchain"
@@ -624,9 +562,8 @@ show_help() {
   p; printf '%s%sPVZGE_FORCE%s      reinstall if current\n' "$MARGIN" "$C" "$R"
   p; printf '%s%sPVZGE_ARCH%s       x86_64|arm64|universal\n' "$MARGIN" "$C" "$R"
   echo ""
-  phase_step "Download" "Use parallel fetch when available"
-  p; printf '%s%sPVZGE_DOWNLOADER%s auto|aria2c|curl-parallel|curl\n' "$MARGIN" "$C" "$R"
-  p; printf '%s%sPVZGE_CONNECTIONS%s parallel connections (default 8)\n' "$MARGIN" "$C" "$R"
+  phase_step "Download" "Choose download tool"
+  p; printf '%s%sPVZGE_DOWNLOADER%s auto|aria2c|curl\n' "$MARGIN" "$C" "$R"
   echo ""
   phase_step "Display" "Tune terminal behavior"
   p; printf '%s%sPVZGE_NO_LAUNCH%s  skip auto-open\n' "$MARGIN" "$C" "$R"
@@ -642,8 +579,8 @@ choose_action() {
   local one="Install"; [ -n "$cur" ] && one="Update"
   menu \
     "$one"       "Download latest" \
-    "Reinstall"  "Clean re-download" \
-    "Uninstall"  "Full data wipe" \
+    "Reinstall"  "Fresh install" \
+    "Uninstall"  "Remove game" \
     "Build"      "Compile from source" \
     "Help"       "Environment overrides" \
     "Quit"       ""
@@ -663,7 +600,7 @@ run_action() {
   case "$ACTION" in
     uninstall)
       start_phase
-      phase_header "Uninstall" "Remove game bundle and local game data"
+      phase_header "Uninstall" "Remove game and saved data"
       uninstall
       ;;
     build)
@@ -677,7 +614,7 @@ run_action() {
       ;;
     reinstall)
       start_phase
-      phase_header "Reinstall" "Clean re-download and local data wipe"
+      phase_header "Reinstall" "Fresh download and install"
       install_with_fallback "$platform" && complete_success "$auto_launch"
       ;;
     *)
