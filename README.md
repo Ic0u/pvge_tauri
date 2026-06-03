@@ -1,9 +1,9 @@
 <div align="center">
 <img width="140" src="src-tauri/icons/source.webp" alt="PvZ2 Gardendless icon">
 
-# PvZ2 Gardendless Port
+# PvZ2 Gardendless UNo Port
 
-A native desktop wrapper for **PvZ2 Gardendless**, packaged with **Tauri**. For people who doesnt give a fuck bout docker container.
+A native desktop wrapper for **PvZ2 Gardendless**, packaged with **Tauri**. For macOS & Linux users who doesnt give a fuck bout docker container, this is unofficial.
 
 [![Release](https://img.shields.io/github/v/release/Ic0u/pvge_tauri?style=flat-square&color=blue)](https://github.com/Ic0u/pvge_tauri/releases)
 [![Build](https://img.shields.io/github/actions/workflow/status/Ic0u/pvge_tauri/release.yml?style=flat-square&label=build)](https://github.com/Ic0u/pvge_tauri/actions/workflows/release.yml)
@@ -19,8 +19,6 @@ A native desktop wrapper for **PvZ2 Gardendless**, packaged with **Tauri**. For 
 ---
 
 ## Download
-
-### One-line installer
 
 Run the installer from Terminal:
 
