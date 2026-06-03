@@ -52,10 +52,11 @@ cls()  { [ "$CAN_CLEAR" = 1 ] && printf '\033[2J\033[H' || true; }
 start_phase() { cls; }
 
 # ── Cleanup ──────────────────────────────────────────────────────────────
-TMP="" MOUNTED_DMG=""
+TMP="" MOUNTED_DMG="" DOWNLOAD_PID=""
 cleanup() {
   printf '%s' "$CNORM" 2>/dev/null || true
   stty echo 2>/dev/null || true
+  [ -n "$DOWNLOAD_PID" ] && kill "$DOWNLOAD_PID" 2>/dev/null || true
   [ -n "$MOUNTED_DMG" ] && hdiutil detach "$MOUNTED_DMG" -quiet 2>/dev/null || true
   [ -n "$TMP" ] && rm -rf "$TMP" 2>/dev/null || true
 }
@@ -240,6 +241,10 @@ human_size() {
   printf '%s' "$RELEASE_JSON" | awk -v n="$n" 'index($0,n){f=1} f&&/"size":/{gsub(/[^0-9]/,"");print;exit}' \
     | awk '{if($1>1e9)printf"%.1f GB",$1/1e9;else printf"%d MB",$1/1e6}'
 }
+asset_size_bytes() {
+  local n; n="\"$(basename "$1")\""
+  printf '%s' "$RELEASE_JSON" | awk -v n="$n" 'index($0,n){f=1} f&&/"size":/{gsub(/[^0-9]/,"");print;exit}'
+}
 resolve_release() {
   [ -n "${VERSION:-}" ] && return
   local api="https://api.github.com/repos/${REPO}/releases/${PVZGE_VERSION:+tags/$PVZGE_VERSION}"
@@ -413,9 +418,41 @@ curl_download() {
   local url="$1" dest="$2"
   curl -fSL --retry 5 --retry-all-errors -C - --progress-bar "$url" -o "$dest"
 }
+bytes_label() {
+  local n="${1:-0}"
+  awk -v n="$n" 'BEGIN {
+    if (n >= 1073741824) printf "%.1fGB", n / 1073741824;
+    else if (n >= 1048576) printf "%.1fMB", n / 1048576;
+    else if (n >= 1024) printf "%.1fKB", n / 1024;
+    else printf "%dB", n;
+  }'
+}
+file_bytes() {
+  [ -f "$1" ] || { printf '0'; return; }
+  wc -c < "$1" | tr -d ' '
+}
+draw_download_progress() {
+  [ "$CAN_TTY" = 1 ] || return 0
+  local done="$1" total="$2" width=24 filled empty i bar="" gap=""
+  case "$done" in ''|*[!0-9]*) done=0 ;; esac
+  case "$total" in ''|*[!0-9]*) return 0 ;; esac
+  [ "$total" -gt 0 ] || return 0
+  [ "$done" -gt "$total" ] && done="$total"
+  local pct=$((done * 100 / total))
+  filled=$((pct * width / 100))
+  empty=$((width - filled))
+  i=0; while [ "$i" -lt "$filled" ]; do bar="${bar}█"; i=$((i+1)); done
+  i=0; while [ "$i" -lt "$empty" ]; do gap="${gap}░"; i=$((i+1)); done
+  printf '\r%s' "$EL"
+  printf '%s%s[%s%s%s%s] %3d%%  %s/%s%s' \
+    "$MARGIN" "$G5" "$bar" "$D" "$gap" "$G5" "$pct" \
+    "$(bytes_label "$done")" "$(bytes_label "$total")" "$R"
+}
 aria2_download() {
-  local url="$1" dest="$2"
+  local url="$1" dest="$2" total="${3:-}" rc=0
+  local log="${dest}.aria2.log"
   aria2c \
+    --quiet=true \
     --allow-overwrite=true \
     --auto-file-renaming=false \
     --continue=true \
@@ -424,18 +461,34 @@ aria2_download() {
     --retry-wait=2 \
     --timeout=30 \
     --connect-timeout=20 \
-    --summary-interval=1 \
-    --show-console-readout=true \
-    --console-log-level=warn \
+    --summary-interval=0 \
+    --show-console-readout=false \
+    --console-log-level=error \
     -d "$(dirname "$dest")" \
     -o "$(basename "$dest")" \
-    "$url"
+    "$url" >"$log" 2>&1 &
+  DOWNLOAD_PID=$!
+
+  if [ "$CAN_TTY" = 1 ] && [ -n "$total" ]; then
+    while kill -0 "$DOWNLOAD_PID" 2>/dev/null; do
+      draw_download_progress "$(file_bytes "$dest")" "$total"
+      sleep 0.15
+    done
+  fi
+
+  wait "$DOWNLOAD_PID" || rc=$?
+  [ -n "$total" ] && draw_download_progress "$(file_bytes "$dest")" "$total"
+  [ "$CAN_TTY" = 1 ] && printf '\n'
+  DOWNLOAD_PID=""
+  rm -f "$log" 2>/dev/null || true
+  return "$rc"
 }
 download_asset() {
   local url="$1" dest="$2"
-  local backend requested
+  local backend requested total
   requested="${PVZGE_DOWNLOADER:-auto}"
   backend="$(download_backend)"
+  total="$(asset_size_bytes "$url")"
   case "$requested" in auto|aria2|aria2c|curl|'') ;; *) bad "Unknown downloader: $requested; using $backend";; esac
   phase_detail "Package" "$(basename "$url")"
   phase_detail "Size" "$(human_size "$url")"
@@ -447,7 +500,7 @@ download_asset() {
   fi
   msg "Downloading package"
   if [ "$backend" = aria2c ]; then
-    aria2_download "$url" "$dest" || {
+    aria2_download "$url" "$dest" "$total" || {
       bad "aria2c failed; using curl"
       curl_download "$url" "$dest" || return 1
     }
