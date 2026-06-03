@@ -56,20 +56,24 @@ choose() {
   while [ $# -ge 2 ]; do labels+=("$1"); descs+=("$2"); n=$((n+1)); shift 2; done
   [ "$INTERACTIVE" = 0 ] && { eval "$_var=0"; return; }
 
-  local sel=0 key
+  local sel=0 key lines=$((n + 2))  # n options + blank + footer
   printf '%s' "$HI"
   while true; do
+    # Draw each option, clearing the full line first
     local i=0
     while [ $i -lt $n ]; do
+      printf '\033[2K'  # erase entire line
       if [ $i -eq $sel ]; then
-        m; printf '%s▸ %-14s%s %s%s\n' "$C" "${labels[$i]}" "$R" "${descs[$i]}" "$R"
+        m; printf '%s▸ %-14s%s %s\n' "$C" "${labels[$i]}" "$R" "${descs[$i]}"
       else
         m; printf '  %s%-14s %s%s\n' "$D" "${labels[$i]}" "${descs[$i]}" "$R"
       fi
       i=$((i+1))
     done
-    echo ""
+    printf '\033[2K\n'  # blank line (cleared)
+    printf '\033[2K'    # clear footer line
     m; printf '%s↑↓%s Navigate  %s⏎%s Select  %sq%s Quit' "$D" "$R" "$D" "$R" "$D" "$R"
+    # Read key
     IFS= read -rsn1 key </dev/tty
     if [ "$key" = $'\x1b' ]; then
       IFS= read -rsn2 key </dev/tty
@@ -81,9 +85,10 @@ choose() {
     elif [ "$key" = "q" ] || [ "$key" = "Q" ]; then
       printf '%s\n' "$SH"; info "Bye!"; exit 0
     fi
-    printf '\033[%dA' "$((n + 1))"
+    # Move cursor back up to redraw
+    printf '\033[%dA' "$lines"
   done
-  printf '%s' "$SH"
+  printf '\n%s' "$SH"
   eval "$_var=$sel"
 }
 
