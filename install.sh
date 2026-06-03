@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PvZ2 Gardendless — installer · updater · uninstaller
+# PvZ2 Gardendless — game installer · updater · uninstaller
 # curl -fsSL https://raw.githubusercontent.com/Ic0u/pvge_tauri/main/install.sh | bash
 set -euo pipefail
 
@@ -39,22 +39,9 @@ fi
 INTERACTIVE=0
 [ -z "${PVZGE_YES:-}" ] && [ -r /dev/tty ] && [ -t 1 ] && INTERACTIVE=1
 
-# ── Terminal width (for centering only; never used for absolute layout) ──
-term_cols() {
-  local sz c
-  sz="$(stty size 2>/dev/null || true)"
-  [ -z "$sz" ] && sz="$({ stty size </dev/tty; } 2>/dev/null || true)"
-  c="${sz##* }"
-  [ -n "$c" ] && [ "$c" -ge 1 ] 2>/dev/null || c="$(command tput cols 2>/dev/null || echo "${COLUMNS:-80}")"
-  [ -n "$c" ] && [ "$c" -ge 1 ] 2>/dev/null || c=80
-  printf '%s' "$c"
-}
-COLS="$(term_cols)"
-# Left indent to center a ~58-wide content block (safe: flowing, never breaks)
-PAD=""
-_pad=$(( (COLS - 58) / 2 )); [ "$_pad" -gt 2 ] && PAD="$(printf "%${_pad}s" "")"
-p() { printf '%s' "$PAD"; }
+# ── Layout ───────────────────────────────────────────────────────────────
 MARGIN="  "
+p() { :; }
 
 # ── Output helpers ───────────────────────────────────────────────────────
 msg()  { p; printf '%s▸%s %s\n'  "$C"  "$R" "$*"; }
@@ -86,6 +73,29 @@ banner() {
   echo ""
   printf '%s%s────────────────────────────────────────%s\n' "$MARGIN" "$D" "$R"
   echo ""
+}
+
+intro_load() {
+  [ "$INTERACTIVE" = 1 ] || return 0
+  start_phase
+  echo ""
+  printf '%s%s%s%s%s\n' "$MARGIN" "$B" "$G1" "$APP" "$R"
+  printf '%s%s%s · %s · game installer%s\n\n' "$MARGIN" "$G4" "$PLATFORM" "$ARCH" "$R"
+  printf '%s' "$CIVIS"
+
+  local step n=0 steps=("Reading latest release" "Checking local game" "Preparing menu")
+  for step in "${steps[@]}"; do
+    n=$((n+1))
+    printf '\r%s' "$EL"
+    printf '%s%s[%s/3]%s %s' "$MARGIN" "$G5" "$n" "$R" "$step"
+    sleep 0.14
+  done
+
+  printf '\r%s' "$EL"
+  printf '%s%sReady%s' "$MARGIN" "$G1" "$R"
+  sleep 0.18
+  printf '\r%s' "$EL"
+  printf '%s' "$CNORM"
 }
 
 phase_header() {
@@ -129,9 +139,9 @@ menu_icon() {
 
 quit_screen() {
   start_phase
-  phase_header "Quit" "Installer closed"
+  phase_header "Quit" "Game installer closed"
   phase_detail "State" "No further actions"
-  phase_note "Re-run the installer any time to update, repair, or remove ${APP}."
+  phase_note "Re-run the installer any time to update, repair, or remove the game."
   echo ""
 }
 
@@ -237,7 +247,7 @@ is_installed() {
 }
 quit_if_running() {
   pgrep -f "$APP" >/dev/null 2>&1 || return 0
-  msg "Closing ${APP}..."
+  msg "Closing game..."
   [ "$OS" = Darwin ] && osascript -e "quit app \"$APP\"" 2>/dev/null || true
   sleep 1; pkill -f "${APP}" 2>/dev/null || true
 }
@@ -290,7 +300,7 @@ install_macos() {
   [ -n "$app_src" ] || { bad "No .app in image"; return 1; }
   good "Mounted"
   echo ""
-  phase_step "4/4" "Install application"
+  phase_step "4/4" "Install game"
   local S=""; [ ! -w /Applications ] && { S=sudo; sudo -v || return 1; }
   quit_if_running; [ -d "$dest" ] && $S rm -rf "$dest"
   spin "Installing" $S ditto "$app_src" "$dest" || return 1
@@ -327,17 +337,17 @@ uninstall() {
   is_installed || { bad "Not installed."; return 0; }
   phase_step "1/3" "Review removal targets"
   if [ "$OS" = Darwin ]; then
-    phase_detail "App" "/Applications/${APP}.app"
+    phase_detail "Game" "/Applications/${APP}.app"
     phase_detail "Data" "${HOME}/Library/*/${APP_ID}"
   else
-    phase_detail "App" "${HOME}/.local/bin/PvZ2-Gardendless.AppImage"
+    phase_detail "Game" "${HOME}/.local/bin/PvZ2-Gardendless.AppImage"
     phase_detail "Data" "$(dirname "$MARKER")"
   fi
   echo ""
   phase_step "2/3" "Confirm removal"
-  confirm "Remove ${APP} and all data? [y/N]" "N" || { msg "Cancelled."; return 0; }; echo ""
+  confirm "Remove ${APP} and all game data? [y/N]" "N" || { msg "Cancelled."; return 0; }; echo ""
   phase_step "3/3" "Remove files"
-  msg "Removing app and data"
+  msg "Removing game and data"
   if [ "$OS" = Darwin ]; then quit_if_running; local S=""; [ ! -w /Applications ] && { S=sudo; sudo -v 2>/dev/null || true; }
     $S rm -rf "/Applications/${APP}.app"
     rm -rf "${HOME}/Library/Application Support/${APP_ID}" "${HOME}/Library/Caches/${APP_ID}" "${HOME}/Library/WebKit/${APP_ID}" 2>/dev/null || true
@@ -365,7 +375,7 @@ build_from_source() {
   msg "Compiling (may take several minutes)..."
   (cd "$src/src-tauri" && $tc build --bundles app) || return 1; good "Built"
   echo ""
-  phase_step "4/4" "Install built app"
+  phase_step "4/4" "Install built game"
   if [ "$OS" = Darwin ]; then local b; b="$(find "$src/src-tauri/target" -maxdepth 5 -name '*.app' -path '*/release/bundle/macos/*' -print -quit)"
     [ -n "$b" ] || return 1; local S=""; [ ! -w /Applications ] && { S=sudo; sudo -v || return 1; }
     quit_if_running; $S rm -rf "/Applications/${APP}.app"; $S ditto "$b" "/Applications/${APP}.app"
@@ -387,7 +397,8 @@ launch_app() {
 }
 finish() {
   start_phase
-  phase_header "Finish" "${APP} is ready"
+  phase_header "Finish" "Game is ready"
+  phase_detail "Game" "$APP"
   phase_detail "Version" "$VERSION"
   [ -n "${DONE_HINT:-}" ] && phase_detail "Launch" "$DONE_HINT"
   echo ""
@@ -400,7 +411,7 @@ complete_success() {
   return 0
 }
 show_help() {
-  phase_header "Help" "Installer flags and one-shot actions"
+  phase_header "Help" "Game installer flags and one-shot actions"
   phase_detail "Usage" "curl -fsSL https://raw.githubusercontent.com/${REPO}/main/install.sh | bash"
   phase_detail "Repo" "github.com/$REPO"
   echo ""
@@ -427,7 +438,7 @@ choose_action() {
   menu \
     "$one"       "Download latest" \
     "Reinstall"  "Force re-download" \
-    "Uninstall"  "Remove app and data" \
+    "Uninstall"  "Remove game data" \
     "Build"      "Compile from source" \
     "Help"       "Environment overrides" \
     "Quit"       ""
@@ -447,7 +458,7 @@ run_action() {
   case "$ACTION" in
     uninstall)
       start_phase
-      phase_header "Uninstall" "Remove app bundle and local app data"
+      phase_header "Uninstall" "Remove game bundle and local game data"
       uninstall
       ;;
     build)
@@ -484,7 +495,7 @@ post_action_prompt() {
   if [ "$ok" = 1 ] && [ -n "${DONE_HINT:-}" ] && [ -z "${PVZGE_NO_LAUNCH:-}" ] && [ "$ACTION" != uninstall ]; then
     menu \
       "Menu"    "Return to installer" \
-      "Launch"  "Open app now" \
+      "Launch"  "Open game now" \
       "Quit"    ""
     case $SELECTED in
       0) return 0 ;;
@@ -521,6 +532,8 @@ main() {
     run_action 1
     return $?
   fi
+
+  intro_load
 
   while true; do
     DONE_HINT=""; LAUNCH_BIN=""
