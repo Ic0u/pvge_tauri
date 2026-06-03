@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PvZ2 Gardendless — game installer · updater · uninstaller
+# PvZ2 Gardendless — boostrapper 
 # curl -fsSL https://raw.githubusercontent.com/Ic0u/pvge_tauri/main/install.sh | bash
 set -euo pipefail
 
@@ -52,10 +52,11 @@ cls()  { [ "$CAN_CLEAR" = 1 ] && printf '\033[2J\033[H' || true; }
 start_phase() { cls; }
 
 # ── Cleanup ──────────────────────────────────────────────────────────────
-TMP="" MOUNTED_DMG=""
+TMP="" MOUNTED_DMG="" DOWNLOAD_PID=""
 cleanup() {
   printf '%s' "$CNORM" 2>/dev/null || true
   stty echo 2>/dev/null || true
+  [ -n "$DOWNLOAD_PID" ] && kill "$DOWNLOAD_PID" 2>/dev/null || true
   [ -n "$MOUNTED_DMG" ] && hdiutil detach "$MOUNTED_DMG" -quiet 2>/dev/null || true
   [ -n "$TMP" ] && rm -rf "$TMP" 2>/dev/null || true
 }
@@ -110,6 +111,10 @@ phase_header() {
 }
 
 phase_detail() {
+  p; printf '%s%s%-11s%s %s\n' "$MARGIN" "$G4" "$1" "$R" "$2"
+}
+
+phase_path() {
   p; printf '%s%s%-11s%s %s\n' "$MARGIN" "$G4" "$1" "$R" "$2"
 }
 
@@ -219,6 +224,14 @@ confirm() {
   local a; IFS= read -r a </dev/tty || a=""
   case "${a:-$2}" in [yY]*) return 0;; *) return 1;; esac
 }
+confirm_destructive() {
+  if [ "$INTERACTIVE" = 0 ]; then
+    [ -n "${PVZGE_YES:-}" ] && return 0
+    bad "Set PVZGE_YES=1 to remove the game."
+    return 1
+  fi
+  confirm "$@"
+}
 
 # ── GitHub API ───────────────────────────────────────────────────────────
 json_assets() { printf '%s' "$RELEASE_JSON" | grep -o '"browser_download_url"[^,]*' | sed 's/.*"://;s/"//g;s/ //g'; }
@@ -227,6 +240,10 @@ human_size() {
   local n; n="\"$(basename "$1")\""
   printf '%s' "$RELEASE_JSON" | awk -v n="$n" 'index($0,n){f=1} f&&/"size":/{gsub(/[^0-9]/,"");print;exit}' \
     | awk '{if($1>1e9)printf"%.1f GB",$1/1e9;else printf"%d MB",$1/1e6}'
+}
+asset_size_bytes() {
+  local n; n="\"$(basename "$1")\""
+  printf '%s' "$RELEASE_JSON" | awk -v n="$n" 'index($0,n){f=1} f&&/"size":/{gsub(/[^0-9]/,"");print;exit}'
 }
 resolve_release() {
   [ -n "${VERSION:-}" ] && return
@@ -240,9 +257,133 @@ installed_version() {
   [ "$OS" = Darwin ] && { defaults read "/Applications/${APP}.app/Contents/Info" CFBundleShortVersionString 2>/dev/null | sed 's/^/v/' || true; return; }
   [ -f "$MARKER" ] && cat "$MARKER" 2>/dev/null || true
 }
+path_exists() { [ -e "$1" ] || [ -L "$1" ]; }
+remove_glob() {
+  local item
+  for item in "$@"; do
+    path_exists "$item" || continue
+    rm -rf "$item" 2>/dev/null || true
+  done
+}
+has_macos_game_data() {
+  path_exists "/Applications/${APP}.app" ||
+  path_exists "${HOME}/Library/Application Support/${APP_ID}" ||
+  path_exists "${HOME}/Library/Caches/${APP_ID}" ||
+  path_exists "${HOME}/Library/WebKit/${APP_ID}" ||
+  path_exists "${HOME}/Library/HTTPStorages/${APP_ID}" ||
+  path_exists "${HOME}/Library/Preferences/${APP_ID}.plist" ||
+  path_exists "${HOME}/Library/Saved Application State/${APP_ID}.savedState" ||
+  path_exists "$(dirname "$MARKER")"
+}
+has_linux_game_data() {
+  path_exists "$MARKER" ||
+  path_exists "${HOME}/.local/bin/PvZ2-Gardendless.AppImage" ||
+  path_exists "${HOME}/.local/share/applications/${APP_ID}.desktop" ||
+  path_exists "${HOME}/.config/${APP_ID}" ||
+  path_exists "${HOME}/.cache/${APP_ID}" ||
+  path_exists "${HOME}/.local/share/${APP_ID}" ||
+  path_exists "${HOME}/.config/pvzge" ||
+  path_exists "${HOME}/.cache/pvzge" ||
+  path_exists "${HOME}/.local/share/pvzge"
+}
+wipe_macos_game_data() {
+  remove_glob \
+    "${HOME}/Library/Application Support/${APP_ID}" \
+    "${HOME}/Library/Application Support/${APP}" \
+    "${HOME}/Library/Application Support/pvzge" \
+    "${HOME}/Library/Caches/${APP_ID}" \
+    "${HOME}/Library/Caches/${APP}" \
+    "${HOME}/Library/Caches/pvzge" \
+    "${HOME}/Library/WebKit/${APP_ID}" \
+    "${HOME}/Library/WebKit/${APP}" \
+    "${HOME}/Library/HTTPStorages/${APP_ID}" \
+    "${HOME}/Library/HTTPStorages/${APP_ID}.binarycookies" \
+    "${HOME}/Library/Cookies/${APP_ID}.binarycookies" \
+    "${HOME}/Library/Preferences/${APP_ID}.plist" \
+    "${HOME}/Library/Preferences/${APP}.plist" \
+    "${HOME}/Library/Saved Application State/${APP_ID}.savedState" \
+    "${HOME}/Library/Saved Application State/${APP}.savedState" \
+    "${HOME}/Library/Containers/${APP_ID}" \
+    "${HOME}/Library/Application Scripts/${APP_ID}" \
+    "${HOME}/Library/Group Containers/${APP_ID}" \
+    "${HOME}/Library/LaunchAgents/${APP_ID}.plist" \
+    "${HOME}/Library/Logs/${APP_ID}" \
+    "${HOME}/Library/Logs/${APP}" \
+    "$(dirname "$MARKER")"
+  remove_glob "${HOME}/Library/Preferences/ByHost/${APP_ID}."*.plist
+  remove_glob "${HOME}/Library/Logs/DiagnosticReports/${APP}"_*.crash
+  remove_glob "${HOME}/Library/Logs/DiagnosticReports/${APP}"_*.ips
+  remove_glob "${HOME}/Library/Logs/DiagnosticReports/${APP}"_*.diag
+}
+wipe_linux_game_data() {
+  remove_glob \
+    "${HOME}/.local/bin/PvZ2-Gardendless.AppImage" \
+    "${HOME}/.local/share/applications/${APP_ID}.desktop" \
+    "${HOME}/.local/share/applications/PvZ2-Gardendless.desktop" \
+    "${HOME}/.local/share/applications/pvzge.desktop" \
+    "${HOME}/.config/${APP_ID}" \
+    "${HOME}/.cache/${APP_ID}" \
+    "${HOME}/.local/share/${APP_ID}" \
+    "${HOME}/.config/${APP}" \
+    "${HOME}/.cache/${APP}" \
+    "${HOME}/.local/share/${APP}" \
+    "${HOME}/.config/pvzge" \
+    "${HOME}/.cache/pvzge" \
+    "${HOME}/.local/share/pvzge" \
+    "$(dirname "$MARKER")"
+}
+wipe_game_data() {
+  [ "$OS" = Darwin ] && wipe_macos_game_data || wipe_linux_game_data
+  good "Old game data removed"
+}
+show_removal_targets() {
+  if [ "$OS" = Darwin ]; then
+    phase_path "Bundle" "/Applications/${APP}.app"
+    phase_path "Support" "${HOME}/Library/Application Support/${APP_ID}"
+    phase_path "Support" "${HOME}/Library/Application Support/${APP}"
+    phase_path "Support" "${HOME}/Library/Application Support/pvzge"
+    phase_path "Cache" "${HOME}/Library/Caches/${APP_ID}"
+    phase_path "Cache" "${HOME}/Library/Caches/${APP}"
+    phase_path "Cache" "${HOME}/Library/Caches/pvzge"
+    phase_path "WebKit" "${HOME}/Library/WebKit/${APP_ID}"
+    phase_path "WebKit" "${HOME}/Library/WebKit/${APP}"
+    phase_path "Storage" "${HOME}/Library/HTTPStorages/${APP_ID}"
+    phase_path "Storage" "${HOME}/Library/HTTPStorages/${APP_ID}.binarycookies"
+    phase_path "Cookies" "${HOME}/Library/Cookies/${APP_ID}.binarycookies"
+    phase_path "Prefs" "${HOME}/Library/Preferences/${APP_ID}.plist"
+    phase_path "Prefs" "${HOME}/Library/Preferences/${APP}.plist"
+    phase_path "Prefs" "${HOME}/Library/Preferences/ByHost/${APP_ID}.*.plist"
+    phase_path "State" "${HOME}/Library/Saved Application State/${APP_ID}.savedState"
+    phase_path "State" "${HOME}/Library/Saved Application State/${APP}.savedState"
+    phase_path "Container" "${HOME}/Library/Containers/${APP_ID}"
+    phase_path "Scripts" "${HOME}/Library/Application Scripts/${APP_ID}"
+    phase_path "Group" "${HOME}/Library/Group Containers/${APP_ID}"
+    phase_path "Agent" "${HOME}/Library/LaunchAgents/${APP_ID}.plist"
+    phase_path "Logs" "${HOME}/Library/Logs/${APP_ID}"
+    phase_path "Logs" "${HOME}/Library/Logs/${APP}"
+    phase_path "Crash" "${HOME}/Library/Logs/DiagnosticReports/${APP}_*.crash"
+    phase_path "Crash" "${HOME}/Library/Logs/DiagnosticReports/${APP}_*.ips"
+    phase_path "Crash" "${HOME}/Library/Logs/DiagnosticReports/${APP}_*.diag"
+    phase_path "Marker" "$(dirname "$MARKER")"
+  else
+    phase_path "Game" "${HOME}/.local/bin/PvZ2-Gardendless.AppImage"
+    phase_path "Desktop" "${HOME}/.local/share/applications/${APP_ID}.desktop"
+    phase_path "Desktop" "${HOME}/.local/share/applications/PvZ2-Gardendless.desktop"
+    phase_path "Desktop" "${HOME}/.local/share/applications/pvzge.desktop"
+    phase_path "Config" "${HOME}/.config/${APP_ID}"
+    phase_path "Config" "${HOME}/.config/${APP}"
+    phase_path "Config" "${HOME}/.config/pvzge"
+    phase_path "Cache" "${HOME}/.cache/${APP_ID}"
+    phase_path "Cache" "${HOME}/.cache/${APP}"
+    phase_path "Cache" "${HOME}/.cache/pvzge"
+    phase_path "Data" "${HOME}/.local/share/${APP_ID}"
+    phase_path "Data" "${HOME}/.local/share/${APP}"
+    phase_path "Data" "${HOME}/.local/share/pvzge"
+  fi
+}
 is_installed() {
-  [ "$OS" = Darwin ] && [ -d "/Applications/${APP}.app" ] && return 0
-  { [ -f "$MARKER" ] || [ -x "${HOME}/.local/bin/PvZ2-Gardendless.AppImage" ]; } && return 0
+  [ "$OS" = Darwin ] && has_macos_game_data && return 0
+  [ "$OS" != Darwin ] && has_linux_game_data && return 0
   return 1
 }
 quit_if_running() {
@@ -264,12 +405,127 @@ pick_macos_dmg() {
   esac
   printf '%s' "$url"
 }
+download_backend() {
+  local wanted="${PVZGE_DOWNLOADER:-auto}"
+  case "$wanted" in
+    aria2|aria2c) command -v aria2c >/dev/null 2>&1 && printf 'aria2c' || printf 'curl' ;;
+    curl) printf 'curl' ;;
+    auto|'') command -v aria2c >/dev/null 2>&1 && printf 'aria2c' || printf 'curl' ;;
+    *) command -v aria2c >/dev/null 2>&1 && printf 'aria2c' || printf 'curl' ;;
+  esac
+}
+curl_download() {
+  local url="$1" dest="$2"
+  curl -fSL --retry 5 --retry-all-errors -C - --progress-bar "$url" -o "$dest"
+}
+bytes_label() {
+  local n="${1:-0}"
+  awk -v n="$n" 'BEGIN {
+    if (n >= 1073741824) printf "%.1fGB", n / 1073741824;
+    else if (n >= 1048576) printf "%.1fMB", n / 1048576;
+    else if (n >= 1024) printf "%.1fKB", n / 1024;
+    else printf "%dB", n;
+  }'
+}
+time_label() {
+  local s="${1:-0}"
+  case "$s" in ''|*[!0-9]*) s=0 ;; esac
+  if [ "$s" -ge 3600 ]; then
+    printf '%dh%02dm' "$((s / 3600))" "$(((s % 3600) / 60))"
+  elif [ "$s" -ge 60 ]; then
+    printf '%dm%02ds' "$((s / 60))" "$((s % 60))"
+  else
+    printf '%ss' "$s"
+  fi
+}
+file_bytes() {
+  [ -f "$1" ] || { printf '0'; return; }
+  wc -c < "$1" | tr -d ' '
+}
+draw_download_progress() {
+  [ "$CAN_TTY" = 1 ] || return 0
+  local done="$1" total="$2" started="${3:-$(date +%s)}" now elapsed speed eta
+  local width=20 filled empty i bar="" gap=""
+  case "$done" in ''|*[!0-9]*) done=0 ;; esac
+  case "$total" in ''|*[!0-9]*) return 0 ;; esac
+  [ "$total" -gt 0 ] || return 0
+  [ "$done" -gt "$total" ] && done="$total"
+  now="$(date +%s)"
+  elapsed=$((now - started)); [ "$elapsed" -lt 1 ] && elapsed=1
+  speed=$((done / elapsed))
+  [ "$speed" -gt 0 ] && eta=$(((total - done) / speed)) || eta=0
+  local pct=$((done * 100 / total))
+  filled=$((pct * width / 100))
+  empty=$((width - filled))
+  i=0; while [ "$i" -lt "$filled" ]; do bar="${bar}█"; i=$((i+1)); done
+  i=0; while [ "$i" -lt "$empty" ]; do gap="${gap}░"; i=$((i+1)); done
+  printf '\r%s' "$EL"
+  printf '%s%s[%s%s%s%s] %3d%%  %s/%s  %s/s  eta %s%s' \
+    "$MARGIN" "$G5" "$bar" "$D" "$gap" "$G5" "$pct" \
+    "$(bytes_label "$done")" "$(bytes_label "$total")" \
+    "$(bytes_label "$speed")" "$(time_label "$eta")" "$R"
+}
+aria2_download() {
+  local url="$1" dest="$2" total="${3:-}" rc=0
+  local log="${dest}.aria2.log" started
+  aria2c \
+    --quiet=true \
+    --allow-overwrite=true \
+    --auto-file-renaming=false \
+    --continue=true \
+    --file-allocation=none \
+    --max-tries=5 \
+    --retry-wait=2 \
+    --timeout=30 \
+    --connect-timeout=20 \
+    --summary-interval=0 \
+    --show-console-readout=false \
+    --console-log-level=error \
+    -d "$(dirname "$dest")" \
+    -o "$(basename "$dest")" \
+    "$url" >"$log" 2>&1 &
+  DOWNLOAD_PID=$!
+
+  if [ "$CAN_TTY" = 1 ] && [ -n "$total" ]; then
+    printf '%s' "$CIVIS"
+    started="$(date +%s)"
+    while kill -0 "$DOWNLOAD_PID" 2>/dev/null; do
+      draw_download_progress "$(file_bytes "$dest")" "$total" "$started"
+      sleep 0.15
+    done
+  fi
+
+  wait "$DOWNLOAD_PID" || rc=$?
+  [ -n "$total" ] && [ "$CAN_TTY" = 1 ] && draw_download_progress "$(file_bytes "$dest")" "$total" "${started:-$(date +%s)}"
+  [ "$CAN_TTY" = 1 ] && printf '%s\n' "$CNORM"
+  DOWNLOAD_PID=""
+  rm -f "$log" 2>/dev/null || true
+  return "$rc"
+}
 download_asset() {
   local url="$1" dest="$2"
+  local backend requested total
+  requested="${PVZGE_DOWNLOADER:-auto}"
+  backend="$(download_backend)"
+  total="$(asset_size_bytes "$url")"
+  case "$requested" in auto|aria2|aria2c|curl|'') ;; *) bad "Unknown downloader: $requested; using $backend";; esac
   phase_detail "Package" "$(basename "$url")"
   phase_detail "Size" "$(human_size "$url")"
+  if [ "$backend" = aria2c ]; then
+    phase_detail "Method" "aria2c · progress"
+  else
+    phase_detail "Method" "curl · progress bar"
+    case "$requested" in aria2|aria2c) bad "aria2c unavailable; using curl";; esac
+  fi
   msg "Downloading package"
-  curl -fSL --retry 5 --retry-all-errors -C - --progress-bar "$url" -o "$dest" || return 1
+  if [ "$backend" = aria2c ]; then
+    aria2_download "$url" "$dest" "$total" || {
+      bad "aria2c failed; using curl"
+      curl_download "$url" "$dest" || return 1
+    }
+  else
+    curl_download "$url" "$dest" || return 1
+  fi
   good "Downloaded"
 }
 
@@ -281,6 +537,7 @@ install_macos() {
   phase_detail "Version" "$VERSION"
   phase_detail "Platform" "$PLATFORM · $ARCH"
   phase_detail "Target" "/Applications/${APP}.app"
+  [ "${ACTION:-}" = reinstall ] && phase_detail "Mode" "Fresh install"
   local dest="/Applications/${APP}.app"
   if [ -z "${PVZGE_FORCE:-}" ] && [ "${ACTION:-}" != reinstall ] && [ -d "$dest" ]; then
     local cur; cur="$(installed_version)"
@@ -302,7 +559,9 @@ install_macos() {
   echo ""
   phase_step "4/4" "Install game"
   local S=""; [ ! -w /Applications ] && { S=sudo; sudo -v || return 1; }
-  quit_if_running; [ -d "$dest" ] && $S rm -rf "$dest"
+  quit_if_running
+  [ "${ACTION:-}" = reinstall ] && { msg "Cleaning old data"; wipe_game_data; }
+  [ -d "$dest" ] && $S rm -rf "$dest"
   spin "Installing" $S ditto "$app_src" "$dest" || return 1
   hdiutil detach "$MOUNTED_DMG" -quiet 2>/dev/null; MOUNTED_DMG=""
   good "Installed"
@@ -320,12 +579,14 @@ install_linux() {
   phase_detail "Version" "$VERSION"
   phase_detail "Format" "$kind"
   phase_detail "Platform" "$PLATFORM · $ARCH"
+  [ "${ACTION:-}" = reinstall ] && phase_detail "Mode" "Fresh install"
   if [ -z "${PVZGE_FORCE:-}" ] && [ "${ACTION:-}" != reinstall ] && [ -f "$MARKER" ] && [ "$(cat "$MARKER")" = "$VERSION" ]; then good "Already up to date ($VERSION)"; return 0; fi
   echo ""
   phase_step "2/3" "Download package"
   TMP="$(mktemp -d)"; download_asset "$url" "$TMP/pkg" || return 1
   echo ""
   phase_step "3/3" "Install package"
+  [ "${ACTION:-}" = reinstall ] && { msg "Cleaning old data"; wipe_game_data; }
   if [ "$kind" = deb ]; then spin "Installing" sudo dpkg -i "$TMP/pkg" || { sudo apt-get -yf install || return 1; }
     DONE_HINT=pvzge; LAUNCH_BIN="$(command -v pvzge 2>/dev/null || echo pvzge)"
   else mkdir -p "${HOME}/.local/bin"; local t="${HOME}/.local/bin/PvZ2-Gardendless.AppImage"
@@ -334,26 +595,19 @@ install_linux() {
   mkdir -p "$(dirname "$MARKER")"; printf '%s' "$VERSION" >"$MARKER" 2>/dev/null || true
 }
 uninstall() {
-  is_installed || { bad "Not installed."; return 0; }
-  phase_step "1/3" "Review removal targets"
-  if [ "$OS" = Darwin ]; then
-    phase_detail "Game" "/Applications/${APP}.app"
-    phase_detail "Data" "${HOME}/Library/*/${APP_ID}"
-  else
-    phase_detail "Game" "${HOME}/.local/bin/PvZ2-Gardendless.AppImage"
-    phase_detail "Data" "$(dirname "$MARKER")"
-  fi
+  is_installed || { bad "Nothing to remove."; return 0; }
+  phase_step "1/3" "Files to remove"
+  show_removal_targets
   echo ""
   phase_step "2/3" "Confirm removal"
-  confirm "Remove ${APP} and all game data? [y/N]" "N" || { msg "Cancelled."; return 0; }; echo ""
+  confirm_destructive "Remove ${APP} completely? [y/N]" "N" || { msg "Cancelled."; return 0; }; echo ""
   phase_step "3/3" "Remove files"
-  msg "Removing game and data"
-  if [ "$OS" = Darwin ]; then quit_if_running; local S=""; [ ! -w /Applications ] && { S=sudo; sudo -v 2>/dev/null || true; }
+  msg "Removing game"
+  if [ "$OS" = Darwin ]; then quit_if_running; local S=""; [ ! -w /Applications ] && { S=sudo; sudo -v || return 1; }
     $S rm -rf "/Applications/${APP}.app"
-    rm -rf "${HOME}/Library/Application Support/${APP_ID}" "${HOME}/Library/Caches/${APP_ID}" "${HOME}/Library/WebKit/${APP_ID}" 2>/dev/null || true
+    wipe_game_data
   else command -v dpkg >/dev/null && dpkg -s pvzge >/dev/null 2>&1 && sudo apt-get -y remove pvzge 2>/dev/null || true
-    rm -f "${HOME}/.local/bin/PvZ2-Gardendless.AppImage" "${HOME}/.local/share/applications/${APP_ID}.desktop" 2>/dev/null || true
-    rm -rf "$(dirname "$MARKER")" 2>/dev/null || true; fi
+    wipe_game_data; fi
   good "${APP} removed."
 }
 build_from_source() {
@@ -423,6 +677,9 @@ show_help() {
   p; printf '%s%sPVZGE_FORCE%s      reinstall if current\n' "$MARGIN" "$C" "$R"
   p; printf '%s%sPVZGE_ARCH%s       x86_64|arm64|universal\n' "$MARGIN" "$C" "$R"
   echo ""
+  phase_step "Download" "Choose download tool"
+  p; printf '%s%sPVZGE_DOWNLOADER%s auto|aria2c|curl\n' "$MARGIN" "$C" "$R"
+  echo ""
   phase_step "Display" "Tune terminal behavior"
   p; printf '%s%sPVZGE_NO_LAUNCH%s  skip auto-open\n' "$MARGIN" "$C" "$R"
   p; printf '%s%sPVZGE_ICONS%s      set 0 to disable Nerd Font icons\n' "$MARGIN" "$C" "$R"
@@ -437,8 +694,8 @@ choose_action() {
   local one="Install"; [ -n "$cur" ] && one="Update"
   menu \
     "$one"       "Download latest" \
-    "Reinstall"  "Force re-download" \
-    "Uninstall"  "Remove game data" \
+    "Reinstall"  "Fresh install" \
+    "Uninstall"  "Remove game" \
     "Build"      "Compile from source" \
     "Help"       "Environment overrides" \
     "Quit"       ""
@@ -458,7 +715,7 @@ run_action() {
   case "$ACTION" in
     uninstall)
       start_phase
-      phase_header "Uninstall" "Remove game bundle and local game data"
+      phase_header "Uninstall" "Remove game and saved data"
       uninstall
       ;;
     build)
@@ -472,7 +729,7 @@ run_action() {
       ;;
     reinstall)
       start_phase
-      phase_header "Reinstall" "Force a clean package download"
+      phase_header "Reinstall" "Fresh download and install"
       install_with_fallback "$platform" && complete_success "$auto_launch"
       ;;
     *)
