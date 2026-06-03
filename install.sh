@@ -12,30 +12,44 @@ MARKER="${HOME}/.local/share/pvzge/version"
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ] && [ "$(tput colors 2>/dev/null || echo 0)" -ge 8 ]; then
   R=$'\033[0m' B=$'\033[1m' D=$'\033[2m' C=$'\033[38;5;6m'
   G=$'\033[38;5;34m' W=$'\033[1;37m' RD=$'\033[31m' YL=$'\033[33m'
-  RV=$'\033[7m' HI=$'\033[?25l' SH=$'\033[?25h' CL=$'\033[2J\033[H'
+  HI=$'\033[?25l' SH=$'\033[?25h' CL=$'\033[2J\033[H'
   TTY=1
 else
-  R='' B='' D='' C='' G='' W='' RD='' YL='' RV='' HI='' SH='' CL='' TTY=0
+  R='' B='' D='' C='' G='' W='' RD='' YL='' HI='' SH='' CL='' TTY=0
 fi
 
-# ── Helpers ──────────────────────────────────────────────────────────────
-info() { printf ' %s▸%s %s\n'  "$C" "$R" "$*"; }
-ok()   { printf ' %s✓%s %s\n'  "$G" "$R" "$*"; }
-warn() { printf ' %s!%s %s\n'  "$YL" "$R" "$*"; }
-die()  { printf '\n %s✗ %s%s\n' "$RD" "$*" "$R" >&2; exit 1; }
+# ── Layout: center everything in the terminal ────────────────────────────
+COLS="$(tput cols 2>/dev/null || echo 80)"
+W_CONTENT=52  # inner content width
+_m=""  # margin cache
+margin() {
+  if [ -z "$_m" ]; then
+    local n=$(( (COLS - W_CONTENT) / 2 ))
+    [ "$n" -gt 0 ] && _m="$(printf "%${n}s" "")" || _m=""
+  fi
+  printf '%s' "$_m"
+}
+m() { margin; }  # short alias
+
+# ── TUI primitives (all centered) ───────────────────────────────────────
+info() { m; printf '%s▸%s %s\n'   "$C" "$R" "$*"; }
+ok()   { m; printf '%s✓%s %s\n'   "$G" "$R" "$*"; }
+warn() { m; printf '%s!%s %s\n'   "$YL" "$R" "$*"; }
+dim()  { m; printf '%s%s%s\n'     "$D" "$*" "$R"; }
+die()  { echo ""; m; printf '%s✗ %s%s\n\n' "$RD" "$*" "$R" >&2; exit 1; }
 cls()  { [ "$TTY" = 1 ] && printf '%s' "$CL" || echo ""; }
+hr()   { m; printf '%s%s%s\n' "$D" "────────────────────────────────────────" "$R"; }
 
 INTERACTIVE=0
 [ -z "${PVZGE_YES:-}" ] && [ -r /dev/tty ] && [ -t 1 ] && INTERACTIVE=1
 confirm() {
   [ "$INTERACTIVE" = 0 ] && return 0
-  printf ' %s%s%s ' "$C" "$1" "$R" >/dev/tty
+  m; printf '%s%s%s ' "$C" "$1" "$R" >/dev/tty
   local a; IFS= read -r a </dev/tty || a=""
   case "${a:-$2}" in [yY]*) return 0;; *) return 1;; esac
 }
 
-# ── Arrow-key menu ───────────────────────────────────────────────────────
-# Usage: choose <var> "label1" "desc1" "label2" "desc2" ...
+# ── Arrow-key menu (centered) ───────────────────────────────────────────
 choose() {
   local _var="$1"; shift
   local labels=() descs=() n=0
@@ -45,18 +59,17 @@ choose() {
   local sel=0 key
   printf '%s' "$HI"
   while true; do
-    # Draw options
     local i=0
     while [ $i -lt $n ]; do
       if [ $i -eq $sel ]; then
-        printf '\r %s▸ %-14s %s%s\n' "$C" "${labels[$i]}" "${descs[$i]}" "$R"
+        m; printf '%s▸ %-14s%s %s%s\n' "$C" "${labels[$i]}" "$R" "${descs[$i]}" "$R"
       else
-        printf '\r   %s%-14s %s%s%s\n' "$D" "${labels[$i]}" "${descs[$i]}" "$R" ""
+        m; printf '  %s%-14s %s%s\n' "$D" "${labels[$i]}" "${descs[$i]}" "$R"
       fi
       i=$((i+1))
     done
-    printf '\n %s↑↓%s  Navigate   %sEnter%s  Select   %sq%s  Quit' "$D" "$R" "$D" "$R" "$D" "$R"
-    # Read key
+    echo ""
+    m; printf '%s↑↓%s Navigate  %s⏎%s Select  %sq%s Quit' "$D" "$R" "$D" "$R" "$D" "$R"
     IFS= read -rsn1 key </dev/tty
     if [ "$key" = $'\x1b' ]; then
       IFS= read -rsn2 key </dev/tty
@@ -64,27 +77,26 @@ choose() {
         '[A') sel=$(( sel > 0 ? sel - 1 : n - 1 )) ;;
         '[B') sel=$(( sel < n - 1 ? sel + 1 : 0 )) ;;
       esac
-    elif [ "$key" = "" ]; then
-      break  # Enter
+    elif [ "$key" = "" ]; then break
     elif [ "$key" = "q" ] || [ "$key" = "Q" ]; then
       printf '%s\n' "$SH"; info "Bye!"; exit 0
     fi
-    # Move cursor up to redraw
     printf '\033[%dA' "$((n + 1))"
   done
   printf '%s' "$SH"
   eval "$_var=$sel"
 }
 
-# ── Spinner ──────────────────────────────────────────────────────────────
+# ── Spinner (centered) ──────────────────────────────────────────────────
 spin() {
   local msg="$1"; shift
   [ "$TTY" = 0 ] && { "$@"; return $?; }
   "$@" &
-  local pid=$! i=0 f='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+  local pid=$! i=0 f='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏' mg
+  mg="$(margin)"
   printf '%s' "$HI"
   while kill -0 "$pid" 2>/dev/null; do
-    printf '\r %s%s%s %s' "$C" "${f:$((i%10)):1}" "$R" "$msg"
+    printf '\r%s%s%s%s %s' "$mg" "$C" "${f:$((i%10)):1}" "$R" "$msg"
     i=$((i+1)); sleep 0.08
   done
   local rc=0; wait "$pid" || rc=$?
@@ -107,7 +119,7 @@ pick() { json_assets | grep -F "$1" | grep -i "${2}\$" | head -1; }
 human_size() {
   local n; n="\"$(basename "$1")\""
   printf '%s' "$RELEASE_JSON" | awk -v n="$n" 'index($0,n){f=1} f&&/"size":/{gsub(/[^0-9]/,"");print;exit}' \
-    | awk '{if($1>1e9)printf"%.1fGB",$1/1e9;else printf"%dMB",$1/1e6}'
+    | awk '{if($1>1e9)printf"%.1f GB",$1/1e9;else printf"%d MB",$1/1e6}'
 }
 
 resolve_release() {
@@ -135,31 +147,58 @@ quit_if_running() {
   sleep 1; pkill -f "${APP}" 2>/dev/null || true
 }
 
+# ── Detect correct macOS build for this machine ─────────────────────────
+pick_macos_dmg() {
+  local arch="$ARCH"
+  # Detect Rosetta: if running under translation, real hardware is arm64
+  [ "$(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0)" = 1 ] && arch=arm64
+
+  # If user forced an arch, respect it
+  if [ -n "${PVZGE_ARCH:-}" ] && [ "${PVZGE_ARCH}" != "auto" ]; then
+    case "$PVZGE_ARCH" in
+      universal) pick macOS-Universal .dmg || true ;;
+      x86_64)    pick macOS-x86_64 .dmg || true ;;
+      arm64)     pick macOS-Apple-Silicon .dmg || true ;;
+    esac
+    return
+  fi
+
+  # Auto: pick the native build first, fall back to universal
+  local url=""
+  case "$arch" in
+    arm64)
+      url="$(pick macOS-Apple-Silicon .dmg || true)"
+      [ -z "$url" ] && url="$(pick macOS-Universal .dmg || true)"
+      ;;
+    x86_64)
+      url="$(pick macOS-x86_64 .dmg || true)"
+      [ -z "$url" ] && url="$(pick macOS-Universal .dmg || true)"
+      ;;
+  esac
+  printf '%s' "$url"
+}
+
 # ── Install macOS ────────────────────────────────────────────────────────
 install_macos() {
   cls
-  printf '\n %s%s · %s%s\n\n' "$B$W" "$APP" "$VERSION" "$R"
+  echo ""
+  m; printf '%s%s%s  %s·  %s%s\n\n' "$B" "$W" "$APP" "$R" "$VERSION" "$R"
 
-  local arch="$ARCH"
-  [ "$(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0)" = 1 ] && arch=arm64
-  local url=""
-  case "${PVZGE_ARCH:-auto}" in
-    universal) url="$(pick macOS-Universal .dmg || true)" ;;
-    x86_64)    url="$(pick macOS-x86_64 .dmg || true)" ;;
-    arm64)     url="$(pick macOS-Apple-Silicon .dmg || true)" ;;
-    *) url="$(pick macOS-Universal .dmg || true)"
-       [ -z "$url" ] && { [ "$arch" = arm64 ] && url="$(pick macOS-Apple-Silicon .dmg || true)" || url="$(pick macOS-x86_64 .dmg || true)"; } ;;
-  esac
+  local url; url="$(pick_macos_dmg)"
   [ -n "$url" ] || { warn "No macOS build in $VERSION"; return 1; }
+  ok "Build: $(basename "$url")"
 
   local dest="/Applications/${APP}.app"
   if [ -z "${PVZGE_FORCE:-}" ] && [ "${ACTION:-}" != reinstall ] && [ -d "$dest" ]; then
     local cur; cur="$(installed_version)"
-    [ -n "$cur" ] && [ "$cur" = "$VERSION" ] && { ok "Already up to date ($cur)"; DONE_HINT="open -a \"$APP\""; return 0; }
+    if [ -n "$cur" ] && [ "$cur" = "$VERSION" ]; then
+      ok "Already up to date ($cur)"
+      DONE_HINT="open -a \"$APP\""; return 0
+    fi
     [ -n "$cur" ] && info "Updating $cur → $VERSION"
   fi
 
-  info "Downloading $(basename "$url")  ($(human_size "$url"))"
+  info "Downloading  $(human_size "$url")"
   TMP="$(mktemp -d)"
   curl -fSL --retry 5 --retry-all-errors -C - --progress-bar "$url" -o "$TMP/pvzge.dmg" || return 1
   ok "Downloaded"
@@ -185,21 +224,23 @@ install_macos() {
 # ── Install Linux ────────────────────────────────────────────────────────
 install_linux() {
   cls
-  printf '\n %s%s · %s%s\n\n' "$B$W" "$APP" "$VERSION" "$R"
+  echo ""
+  m; printf '%s%s%s  %s·  %s%s\n\n' "$B" "$W" "$APP" "$R" "$VERSION" "$R"
 
-  [ "$ARCH" = x86_64 ] || { warn "Only x86_64 Linux builds exist"; return 1; }
+  [ "$ARCH" = x86_64 ] || { warn "Only x86_64 Linux builds available"; return 1; }
   local url kind
   if [ -n "$(pick Linux-x86_64 .deb || true)" ] && command -v dpkg >/dev/null; then
     url="$(pick Linux-x86_64 .deb)"; kind=deb
   elif [ -n "$(pick Linux-x86_64 .AppImage || true)" ]; then
     url="$(pick Linux-x86_64 .AppImage)"; kind=appimage
   else warn "No Linux build"; return 1; fi
+  ok "Build: $(basename "$url")"
 
   if [ -z "${PVZGE_FORCE:-}" ] && [ "${ACTION:-}" != reinstall ] && [ -f "$MARKER" ] && [ "$(cat "$MARKER")" = "$VERSION" ]; then
     ok "Already up to date ($VERSION)"; return 0
   fi
 
-  info "Downloading $(basename "$url")  ($(human_size "$url"))"
+  info "Downloading  $(human_size "$url")"
   TMP="$(mktemp -d)"
   curl -fSL --retry 5 --retry-all-errors -C - --progress-bar "$url" -o "$TMP/pkg" || return 1
   ok "Downloaded"
@@ -220,9 +261,11 @@ install_linux() {
 
 # ── Uninstall ────────────────────────────────────────────────────────────
 uninstall() {
-  cls; printf '\n %s%sUninstall%s\n\n' "$B" "$RD" "$R"
+  cls; echo ""
+  m; printf '%s%sUninstall%s\n\n' "$B" "$RD" "$R"
   is_installed || { warn "Not installed."; return 0; }
-  confirm "Remove ${APP} and all its data? [y/N]" "N" || { info "Cancelled."; return 0; }
+  confirm "Remove ${APP} and all data? [y/N]" "N" || { info "Cancelled."; return 0; }
+  echo ""
   if [ "$OS" = Darwin ]; then
     quit_if_running
     local S=""; [ ! -w /Applications ] && { S=sudo; sudo -v 2>/dev/null || true; }
@@ -239,7 +282,8 @@ uninstall() {
 
 # ── Build from source ────────────────────────────────────────────────────
 build_from_source() {
-  cls; printf '\n %s%sBuild from source%s\n\n' "$B" "$YL" "$R"
+  cls; echo ""
+  m; printf '%s%sBuild from source%s\n\n' "$B" "$YL" "$R"
   for t in git cargo node; do command -v "$t" >/dev/null || { warn "Missing: $t"; return 1; }; done
   local tc=""
   command -v tauri >/dev/null && tc=tauri || { cargo tauri --version >/dev/null 2>&1 && tc="cargo tauri"; } || {
@@ -283,10 +327,12 @@ launch_app() {
 }
 
 finish() {
-  cls
-  printf '\n %s✓ %s%s is ready%s\n\n' "$G" "$B" "$APP" "$R"
-  [ -n "${DONE_HINT:-}" ] && printf ' %s$ %s%s\n\n' "$D" "${DONE_HINT}" "$R"
-  printf ' %sGame by Gaozih · Port by Marcus Nguyen%s\n\n' "$D" "$R"
+  cls; echo ""
+  m; printf '%s✓ %s%s is ready%s\n\n' "$G" "$B" "$APP" "$R"
+  [ -n "${DONE_HINT:-}" ] && { m; printf '%s$ %s%s\n\n' "$D" "${DONE_HINT}" "$R"; }
+  hr
+  dim "Game by Gaozih · Port by Marcus Nguyen"
+  echo ""
 }
 
 # ── Main ─────────────────────────────────────────────────────────────────
@@ -294,43 +340,51 @@ main() {
   OS="$(uname -s)"; ARCH="$(uname -m)"
   case "$OS" in Darwin) PLATFORM=macOS;; Linux) PLATFORM=Linux;; *) die "Unsupported: $OS";; esac
 
-  cls
-  printf '\n %s%sPvZ2 Gardendless%s  %s%s · %s%s\n' "$B$G" "" "$R" "$D" "$PLATFORM" "$ARCH" "$R"
+  cls; echo ""
+  m; printf '%s%sPvZ2 Gardendless%s\n' "$B$G" "" "$R"
+  m; printf '%s%s · %s%s\n' "$D" "$PLATFORM" "$ARCH" "$R"
+  echo ""
   local cur; cur="$(installed_version)"
-  [ -n "$cur" ] && printf ' %sInstalled: %s%s%s\n' "$D" "$G" "$cur" "$R" || printf ' %sNot installed%s\n' "$D" "$R"
+  [ -n "$cur" ] && { m; printf 'Installed  %s%s%s\n' "$G" "$cur" "$R"; } || { m; printf 'Installed  %s—%s\n' "$D" "$R"; }
 
   ACTION="${PVZGE_ACTION:-}"
   if [ "$ACTION" != uninstall ]; then
-    printf ' %sFetching latest release...%s' "$D" "$R"
+    m; printf 'Latest     %sfetching...%s' "$D" "$R"
     resolve_release
-    printf '\r\033[K %sLatest:    %s%s%s\n' "$D" "$G" "$VERSION" "$R"
+    printf '\r'; m; printf 'Latest     %s%s%s\n' "$G" "$VERSION" "$R"
   fi
+  echo ""
+  hr
   echo ""
 
   if [ -z "$ACTION" ] && [ "$INTERACTIVE" = 1 ]; then
     local one="Install"; [ -n "$cur" ] && one="Update"
     local sel
     choose sel \
-      "$one"      "Download latest release" \
+      "$one"       "Download latest release" \
       "Reinstall"  "Force clean re-download" \
       "Uninstall"  "Remove app and data" \
       "Build"      "Compile from source" \
-      "Help"       "Show env overrides" \
+      "Help"       "Environment overrides" \
       "Quit"       ""
     case $sel in
       0) ACTION=update ;;
       1) ACTION=reinstall; PVZGE_FORCE=1 ;;
       2) ACTION=uninstall ;;
       3) ACTION=build ;;
-      4) cls; printf '\n %s%sEnvironment overrides%s\n\n' "$B" "$W" "$R"
-         printf ' %sPVZGE_ACTION%s     install|build|uninstall\n' "$C" "$R"
-         printf ' %sPVZGE_VERSION%s    pin release (e.g. v0.8.2)\n' "$C" "$R"
-         printf ' %sPVZGE_FORCE%s      reinstall even if current\n' "$C" "$R"
-         printf ' %sPVZGE_ARCH%s       universal|x86_64|arm64\n' "$C" "$R"
-         printf ' %sPVZGE_NO_LAUNCH%s  skip auto-open\n' "$C" "$R"
-         printf ' %sNO_COLOR%s         disable colors\n\n' "$C" "$R"
-         printf ' %sGame by Gaozih & PvZ2GE Team · Port by Marcus Nguyen%s\n' "$D" "$R"
-         printf ' %sgithub.com/%s%s\n\n' "$D" "$REPO" "$R"
+      4) cls; echo ""
+         m; printf '%s%sEnvironment overrides%s\n\n' "$B" "$W" "$R"
+         m; printf '%sPVZGE_ACTION%s     install|build|uninstall\n' "$C" "$R"
+         m; printf '%sPVZGE_VERSION%s    pin release (v0.8.2)\n' "$C" "$R"
+         m; printf '%sPVZGE_FORCE%s      reinstall if current\n' "$C" "$R"
+         m; printf '%sPVZGE_ARCH%s       x86_64|arm64|universal\n' "$C" "$R"
+         m; printf '%sPVZGE_NO_LAUNCH%s  skip auto-open\n' "$C" "$R"
+         m; printf '%sNO_COLOR%s         disable colors\n' "$C" "$R"
+         echo ""
+         hr
+         dim "Game by Gaozih · Port by Marcus Nguyen"
+         dim "github.com/$REPO"
+         echo ""
          exit 0 ;;
       5) exit 0 ;;
     esac
