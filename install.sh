@@ -113,6 +113,10 @@ phase_detail() {
   p; printf '%s%s%-11s%s %s\n' "$MARGIN" "$G4" "$1" "$R" "$2"
 }
 
+phase_path() {
+  p; printf '%s%s%-11s%s %s\n' "$MARGIN" "$G4" "$1" "$R" "$2"
+}
+
 phase_step() {
   p; printf '%s%s%-11s%s %s\n' "$MARGIN" "$G5" "$1" "$R" "$2"
 }
@@ -327,6 +331,51 @@ wipe_game_data() {
   [ "$OS" = Darwin ] && wipe_macos_game_data || wipe_linux_game_data
   good "Old game data removed"
 }
+show_removal_targets() {
+  if [ "$OS" = Darwin ]; then
+    phase_path "Bundle" "/Applications/${APP}.app"
+    phase_path "Support" "${HOME}/Library/Application Support/${APP_ID}"
+    phase_path "Support" "${HOME}/Library/Application Support/${APP}"
+    phase_path "Support" "${HOME}/Library/Application Support/pvzge"
+    phase_path "Cache" "${HOME}/Library/Caches/${APP_ID}"
+    phase_path "Cache" "${HOME}/Library/Caches/${APP}"
+    phase_path "Cache" "${HOME}/Library/Caches/pvzge"
+    phase_path "WebKit" "${HOME}/Library/WebKit/${APP_ID}"
+    phase_path "WebKit" "${HOME}/Library/WebKit/${APP}"
+    phase_path "Storage" "${HOME}/Library/HTTPStorages/${APP_ID}"
+    phase_path "Storage" "${HOME}/Library/HTTPStorages/${APP_ID}.binarycookies"
+    phase_path "Cookies" "${HOME}/Library/Cookies/${APP_ID}.binarycookies"
+    phase_path "Prefs" "${HOME}/Library/Preferences/${APP_ID}.plist"
+    phase_path "Prefs" "${HOME}/Library/Preferences/${APP}.plist"
+    phase_path "Prefs" "${HOME}/Library/Preferences/ByHost/${APP_ID}.*.plist"
+    phase_path "State" "${HOME}/Library/Saved Application State/${APP_ID}.savedState"
+    phase_path "State" "${HOME}/Library/Saved Application State/${APP}.savedState"
+    phase_path "Container" "${HOME}/Library/Containers/${APP_ID}"
+    phase_path "Scripts" "${HOME}/Library/Application Scripts/${APP_ID}"
+    phase_path "Group" "${HOME}/Library/Group Containers/${APP_ID}"
+    phase_path "Agent" "${HOME}/Library/LaunchAgents/${APP_ID}.plist"
+    phase_path "Logs" "${HOME}/Library/Logs/${APP_ID}"
+    phase_path "Logs" "${HOME}/Library/Logs/${APP}"
+    phase_path "Crash" "${HOME}/Library/Logs/DiagnosticReports/${APP}_*.crash"
+    phase_path "Crash" "${HOME}/Library/Logs/DiagnosticReports/${APP}_*.ips"
+    phase_path "Crash" "${HOME}/Library/Logs/DiagnosticReports/${APP}_*.diag"
+    phase_path "Marker" "$(dirname "$MARKER")"
+  else
+    phase_path "Game" "${HOME}/.local/bin/PvZ2-Gardendless.AppImage"
+    phase_path "Desktop" "${HOME}/.local/share/applications/${APP_ID}.desktop"
+    phase_path "Desktop" "${HOME}/.local/share/applications/PvZ2-Gardendless.desktop"
+    phase_path "Desktop" "${HOME}/.local/share/applications/pvzge.desktop"
+    phase_path "Config" "${HOME}/.config/${APP_ID}"
+    phase_path "Config" "${HOME}/.config/${APP}"
+    phase_path "Config" "${HOME}/.config/pvzge"
+    phase_path "Cache" "${HOME}/.cache/${APP_ID}"
+    phase_path "Cache" "${HOME}/.cache/${APP}"
+    phase_path "Cache" "${HOME}/.cache/pvzge"
+    phase_path "Data" "${HOME}/.local/share/${APP_ID}"
+    phase_path "Data" "${HOME}/.local/share/${APP}"
+    phase_path "Data" "${HOME}/.local/share/pvzge"
+  fi
+}
 is_installed() {
   [ "$OS" = Darwin ] && has_macos_game_data && return 0
   [ "$OS" != Darwin ] && has_linux_game_data && return 0
@@ -475,14 +524,8 @@ install_linux() {
 }
 uninstall() {
   is_installed || { bad "Nothing to remove."; return 0; }
-  phase_step "1/3" "Review"
-  if [ "$OS" = Darwin ]; then
-    phase_detail "Game" "/Applications/${APP}.app"
-    phase_detail "Data" "Saved data and leftovers"
-  else
-    phase_detail "Game" "${HOME}/.local/bin/PvZ2-Gardendless.AppImage"
-    phase_detail "Data" "Saved data and shortcuts"
-  fi
+  phase_step "1/3" "Files to remove"
+  show_removal_targets
   echo ""
   phase_step "2/3" "Confirm removal"
   confirm_destructive "Remove ${APP} completely? [y/N]" "N" || { msg "Cancelled."; return 0; }; echo ""
