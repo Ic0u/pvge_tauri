@@ -1,5 +1,4 @@
 <div align="center">
-
 <img width="140" src="src-tauri/icons/source.webp" alt="PvZ2 Gardendless icon">
 
 # PvZ2 Gardendless Port
@@ -28,6 +27,8 @@ Run the installer from Terminal:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Ic0u/pvge_tauri/main/install.sh | bash
 ```
+
+![demo](demo.gif)
 
 The installer fetches the latest GitHub Release, detects your platform and CPU architecture, downloads the matching build, and installs it automatically.
 
