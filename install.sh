@@ -8,58 +8,48 @@ APP="PvZ2 Gardendless"
 APP_ID="com.pvzge.desktop"
 MARKER="${HOME}/.local/share/pvzge/version"
 
-# ── Pure-bash tput (inspired by Nightfall by Dave Eddy) ──────────────────
+# ── Colors (PvZ2 green gradient) ─────────────────────────────────────────
 ESC=$'\x1b'
-_tput() {
-  case "$1" in
-    cup)    printf '%s[%d;%dH' "$ESC" "$(($2+1))" "$(($3+1))";;
-    setaf)  printf '%s[38;5;%dm' "$ESC" "$2";;
-    setab)  printf '%s[48;5;%dm' "$ESC" "$2";;
-    sgr0)   printf '%s[0m' "$ESC";;
-    bold)   printf '%s[1m' "$ESC";;
-    dim)    printf '%s[2m' "$ESC";;
-    civis)  printf '%s[?25l' "$ESC";;
-    cnorm)  printf '%s[?25h' "$ESC";;
-    smcup)  printf '%s[?1049h' "$ESC";;
-    rmcup)  printf '%s[?1049l' "$ESC";;
-    clear)  printf '%s[2J' "$ESC";;
-    el)     printf '%s[2K' "$ESC";;
-    *)      command tput "$@" 2>/dev/null;;
-  esac
-}
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+  R=$'\033[0m' B=$'\033[1m' D=$'\033[2m'
+  G1=$'\033[38;5;154m' G2=$'\033[38;5;118m' G3=$'\033[38;5;82m'
+  G4=$'\033[38;5;76m'  G5=$'\033[38;5;34m'  G6=$'\033[38;5;28m' G7=$'\033[38;5;22m'
+  C=$'\033[38;5;76m'   RD=$'\033[31m' YL=$'\033[33m'
+  CIVIS=$'\033[?25l' CNORM=$'\033[?25h' EL=$'\033[2K'
+  TTY=1
+else
+  R='' B='' D='' G1='' G2='' G3='' G4='' G5='' G6='' G7='' C='' RD='' YL=''
+  CIVIS='' CNORM='' EL='' TTY=0
+fi
 
-# ── State ────────────────────────────────────────────────────────────────
-INTERACTIVE=0; TTY=0; COLS=80; ROWS=24
-TMP=""; MOUNTED_DMG=""; VERSION=""; RELEASE_JSON=""
-OS=""; ARCH=""; PLATFORM=""
+INTERACTIVE=0
+[ -z "${PVZGE_YES:-}" ] && [ -r /dev/tty ] && [ -t 1 ] && INTERACTIVE=1
 
-# ── Terminal size — stty first (kernel tty size, ignores $TERM), then
-#    tput, then $COLUMNS/$LINES, then 80x24. tput silently returns the
-#    80x24 fallback when $TERM is unset (Finder/odd launchers), which is
-#    what jammed the UI into a corner — stty avoids that entirely. ────────
-read_size() {
-  local sz=""
+# ── Terminal width (for centering only; never used for absolute layout) ──
+term_cols() {
+  local sz c
   sz="$(stty size </dev/tty 2>/dev/null || true)"
-  if [ -n "$sz" ] && [ "${sz% *}" -ge 1 ] 2>/dev/null; then
-    ROWS="${sz%% *}"; COLS="${sz##* }"
-  else
-    COLS="$(command tput cols 2>/dev/null || echo "${COLUMNS:-80}")"
-    ROWS="$(command tput lines 2>/dev/null || echo "${LINES:-24}")"
-  fi
-  [ -n "$COLS" ] && [ "$COLS" -ge 1 ] 2>/dev/null || COLS=80
-  [ -n "$ROWS" ] && [ "$ROWS" -ge 1 ] 2>/dev/null || ROWS=24
+  c="${sz##* }"
+  [ -n "$c" ] && [ "$c" -ge 1 ] 2>/dev/null || c="$(command tput cols 2>/dev/null || echo "${COLUMNS:-80}")"
+  [ -n "$c" ] && [ "$c" -ge 1 ] 2>/dev/null || c=80
+  printf '%s' "$c"
 }
+COLS="$(term_cols)"
+# Left indent to center a ~58-wide content block (safe: flowing, never breaks)
+PAD=""
+_pad=$(( (COLS - 58) / 2 )); [ "$_pad" -gt 2 ] && PAD="$(printf "%${_pad}s" "")"
+p() { printf '%s' "$PAD"; }
 
-init_term() {
-  if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then TTY=1; fi
-  [ -z "${PVZGE_YES:-}" ] && [ -r /dev/tty ] && [ -t 1 ] && INTERACTIVE=1
-  read_size
-}
+# ── Output helpers ───────────────────────────────────────────────────────
+msg()  { p; printf '%s▸%s %s\n'  "$C"  "$R" "$*"; }
+good() { p; printf '%s✓%s %s\n'  "$G1" "$R" "$*"; }
+bad()  { p; printf '%s!%s %s\n'  "$YL" "$R" "$*"; }
+dim()  { p; printf '%s%s%s\n'    "$D"  "$*" "$R"; }
 
-# ── Cleanup (Nightfall-style: restore terminal on any exit) ──────────────
+# ── Cleanup ──────────────────────────────────────────────────────────────
+TMP="" MOUNTED_DMG=""
 cleanup() {
-  _tput cnorm
-  [ "$TTY" = 1 ] && [ "$INTERACTIVE" = 1 ] && _tput rmcup
+  printf '%s' "$CNORM" 2>/dev/null || true
   stty echo 2>/dev/null || true
   [ -n "$MOUNTED_DMG" ] && hdiutil detach "$MOUNTED_DMG" -quiet 2>/dev/null || true
   [ -n "$TMP" ] && rm -rf "$TMP" 2>/dev/null || true
@@ -67,211 +57,114 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT TERM
 
-# ── Drawing helpers ──────────────────────────────────────────────────────
-at()   { _tput cup "$1" "$2"; }  # row col
-clr()  { _tput el; }             # clear current line
-color(){ _tput setaf "$1"; }
-bg()   { _tput setab "$1"; }
-bold() { _tput bold; }
-dim()  { _tput dim; }
-rst()  { _tput sgr0; }
-
-# Print at position: pat row col "text"
-pat() { at "$1" "$2"; shift 2; printf '%s' "$*"; }
-
-# ── Gradient peashooter (CP437-style block shading) ──────────────────────
-# Uses ░▒▓█ gradient in greens (28→34→40→46→82→118)
-draw_peashooter() {
-  local r=$1 c=$2
-  local g1=22 g2=28 g3=34 g4=76 g5=154 g6=118
-  local lines=(
-    "        ░▒▓██▓▒░"
-    "      ░▓██████████▓░"
-    "    ░▓██  ██    ██  ██▓░"
-    "    ▓██   ▓▓    ▓▓   ██▓"
-    "    ▓██              ██▓"
-    "     ▓███   ▀▀▀▀  ███▓"
-    "      ░▓██████████████░"
-    "         ▓████████▓"
-    "       ░▓██████████▓▒"
-    "      ▓████████████████▓"
-    "     ▓██▓▒░      ░▒▓██▓"
-    "      ██             ██"
-    "       ▓░           ░▓"
-    "        ░░░░░░░░░░░░░"
+# ── Peashooter banner (flowing — printed once, no absolute positioning) ──
+banner() {
+  local g=("$G7" "$G6" "$G6" "$G5" "$G5" "$G4" "$G4" "$G3" "$G3" "$G2" "$G2" "$G3" "$G4" "$G5")
+  local art=(
+    "      ░▒▓██▓▒░"
+    "    ░▓██████████▓░"
+    "  ░▓██  ██    ██  ██▓░"
+    "  ▓██   ▓▓    ▓▓   ██▓"
+    "  ▓██              ██▓"
+    "   ▓███   ▀▀▀▀  ███▓"
+    "    ░▓██████████████░"
+    "       ▓████████▓"
+    "     ░▓██████████▓▒"
+    "    ▓████████████████▓"
+    "   ▓██▓▒░      ░▒▓██▓"
+    "    ██             ██"
+    "     ▓░           ░▓"
+    "      ░░░░░░░░░░░░░"
   )
-  local colors=($g1 $g2 $g2 $g3 $g3 $g4 $g4 $g5 $g5 $g6 $g6 $g5 $g4 $g3)
+  echo ""
   local i=0
-  for line in "${lines[@]}"; do
-    color "${colors[$i]}"
-    pat "$((r + i))" "$c" "$line"
-    i=$((i + 1))
+  for line in "${art[@]}"; do
+    p; printf '        %s%s%s\n' "${g[$i]}" "$line" "$R"
+    i=$((i+1))
   done
-  rst
-}
-
-# ── Animated border (Nightfall-style) ────────────────────────────────────
-draw_border() {
-  local shade=("$@")  # array of color codes, outer→inner
-  local i=0
-  for clr_code in "${shade[@]}"; do
-    bg "$clr_code"
-    # Top
-    at "$i" "$((i * 2))"
-    printf '%*s' "$((COLS - i * 4))" ''
-    # Bottom
-    at "$((ROWS - i - 1))" "$((i * 2))"
-    printf '%*s' "$((COLS - i * 4))" ''
-    # Sides
-    local row
-    for ((row = i; row < ROWS - i; row++)); do
-      at "$row" "$((i * 2))"; printf '  '
-      at "$row" "$((COLS - i * 2 - 2))"; printf '  '
-    done
-    rst
-    sleep 0.03 2>/dev/null || true
-    i=$((i + 1))
-  done
-}
-
-# ── Draw the full UI ─────────────────────────────────────────────────────
-SELECTED=0
-MENU_LABELS=() MENU_DESCS=()
-
-draw_ui() {
-  local cx=$((COLS / 2))
-  # Vertically center the ~18-row content block within the real terminal
-  local top=$(( (ROWS - 18) / 2 )); [ "$top" -lt 2 ] && top=2
-
-  # ── Left: peashooter ──
-  draw_peashooter "$((top + 2))" "$((cx - 42))"
-
-  # ── Right: info panel ──
-  local rx=$((cx - 10))
-  # Nerd Font OS icon
+  echo ""
   local os_icon=""; [ "$OS" = Darwin ] && os_icon="" || os_icon=""
-  bold; color 154
-  pat "$((top))" "$rx" "$APP"
-  rst; color 76
-  pat "$((top + 1))" "$rx" "$os_icon $PLATFORM · $ARCH"
-  rst
-
-  # Status
+  p; printf '   %s%s%s%s\n' "$B" "$G1" "$APP" "$R"
+  p; printf '   %s%s %s · %s%s\n' "$G4" "$os_icon" "$PLATFORM" "$ARCH" "$R"
+  echo ""
   local cur; cur="$(installed_version)"
-  local y=$((top + 3))
-  color 76; pat "$y" "$rx" "  Installed  "; rst
-  if [ -n "$cur" ]; then color 154; printf '%s' "$cur"; else dim; printf '—'; fi
-  rst
-
-  y=$((y + 1))
-  color 76; pat "$y" "$rx" "  Latest     "; rst
-  color 154; printf '%s' "${VERSION:-…}"; rst
-
-  # ── Menu (with Nerd Font icons) ──
-  # Icons: 󰏔 download, 󰑓 reinstall, 󰩺 uninstall, 󰙲 build,  help,  quit
-  local icons=("󰏔" "󰑓" "󰩺" "󰙲" "" "")
-  y=$((top + 7))
-  local n=${#MENU_LABELS[@]} i=0
-  while [ $i -lt $n ]; do
-    at "$y" 0; clr  # clear from col 0 to prevent smear
-    at "$y" "$rx"
-    if [ $i -eq $SELECTED ]; then
-      color 154; bold; printf '▸ '; rst
-      color 154; printf '%s ' "${icons[$i]:-}"; rst
-      color 76; bold; printf '%-13s' "${MENU_LABELS[$i]}"; rst
-      color 34; printf ' %s' "${MENU_DESCS[$i]}"; rst
-    else
-      dim; printf '  %s %-13s %s' "${icons[$i]:-}" "${MENU_LABELS[$i]}" "${MENU_DESCS[$i]}"; rst
-    fi
-    y=$((y + 1)); i=$((i + 1))
-  done
-
-  # Footer
-  y=$((ROWS - 3))
-  at "$y" 0; clr; at "$y" "$rx"
-  color 28; printf '↑↓'; rst; dim; printf ' Navigate  '; rst
-  color 28; printf '⏎'; rst; dim; printf ' Select  '; rst
-  color 28; printf 'q'; rst; dim; printf ' Quit'; rst
-
-  # Credits
-  y=$((ROWS - 2))
-  at "$y" "$((cx - 26))"
-  dim; printf '  Game by Gaozih · macOS/Linux port by Marcus Nguyen'; rst
+  p; printf '   %sInstalled  %s' "$G4" "$R"; [ -n "$cur" ] && { printf '%s%s%s\n' "$G1" "$cur" "$R"; } || { printf '%s—%s\n' "$D" "$R"; }
+  p; printf '   %sLatest     %s%s%s%s\n' "$G4" "$R" "$G1" "${VERSION:-…}" "$R"
+  echo ""
 }
 
-# ── Arrow-key event loop (Nightfall-style: read from tty) ────────────────
-run_menu() {
-  MENU_LABELS=("$@")
-  # Split interleaved labels/descs
-  local all=("$@") labels=() descs=() i=0
-  while [ $i -lt ${#all[@]} ]; do
-    labels+=("${all[$i]}")
-    descs+=("${all[$((i+1))]}")
-    i=$((i + 2))
-  done
-  MENU_LABELS=("${labels[@]}")
-  MENU_DESCS=("${descs[@]}")
+# ── Arrow-key menu (flowing; redraws only its own lines, never a new screen)
+SELECTED=0
+menu() {
+  local labels=() descs=() all=("$@") i=0
+  while [ $i -lt ${#all[@]} ]; do labels+=("${all[$i]}"); descs+=("${all[$((i+1))]}"); i=$((i+2)); done
   local n=${#labels[@]}
+  local icons=("󰏔" "󰑓" "󰩺" "󰙲" "" "")
   SELECTED=0
 
-  _tput civis
-  stty -echo 2>/dev/null || true
+  if [ "$INTERACTIVE" = 0 ]; then SELECTED=0; return; fi
 
-  draw_ui
-
+  printf '%s' "$CIVIS"; stty -echo 2>/dev/null || true
   while true; do
-    local key
-    IFS= read -rsn1 key </dev/tty
-    if [ "$key" = "$ESC" ]; then
-      IFS= read -rsn2 key </dev/tty
-      case "$key" in
-        '[A'|'[D') SELECTED=$(( SELECTED > 0 ? SELECTED - 1 : n - 1 ));;
-        '[B'|'[C') SELECTED=$(( SELECTED < n - 1 ? SELECTED + 1 : 0 ));;
-      esac
-    elif [ "$key" = "" ]; then
-      break  # Enter
-    elif [ "$key" = "q" ] || [ "$key" = "Q" ]; then
-      stty echo 2>/dev/null || true; _tput cnorm; exit 0
-    elif [ "$key" = "k" ] || [ "$key" = "K" ]; then
-      SELECTED=$(( SELECTED > 0 ? SELECTED - 1 : n - 1 ))
-    elif [ "$key" = "j" ] || [ "$key" = "J" ]; then
-      SELECTED=$(( SELECTED < n - 1 ? SELECTED + 1 : 0 ))
-    fi
-    draw_ui
-  done
+    i=0
+    while [ $i -lt $n ]; do
+      printf '\r%s' "$EL"   # CR to col 0, then clear the whole line
+      if [ $i -eq $SELECTED ]; then
+        p; printf ' %s▸ %s ' "$G1$B" "$R"
+        printf '%s%-12s%s' "$G1$B" "${labels[$i]}" "$R"
+        printf '  %s%s%s\n' "$G4" "${descs[$i]}" "$R"
+      else
+        p; printf '   %s%s %-12s%s  %s%s%s\n' "$D" "${icons[$i]:-}" "${labels[$i]}" "$R" "$D" "${descs[$i]}" "$R"
+      fi
+      i=$((i+1))
+    done
+    printf '\r%s\n' "$EL"
+    printf '\r%s' "$EL"; p; printf '   %s↑↓%s nav  %s⏎%s select  %sq%s quit' "$G5" "$R" "$G5" "$R" "$G5" "$R"
 
-  stty echo 2>/dev/null || true
-  _tput cnorm
+    local key
+    IFS= read -rsn1 key </dev/tty || { key=q; }
+    if [ "$key" = "$ESC" ]; then
+      IFS= read -rsn2 -t 0.05 key </dev/tty 2>/dev/null || key=""
+      case "$key" in
+        '[A') SELECTED=$(( SELECTED>0 ? SELECTED-1 : n-1 ));;
+        '[B') SELECTED=$(( SELECTED<n-1 ? SELECTED+1 : 0 ));;
+      esac
+    elif [ -z "$key" ]; then break
+    elif [ "$key" = q ] || [ "$key" = Q ]; then
+      stty echo 2>/dev/null || true; printf '%s\n' "$CNORM"; exit 0
+    elif [ "$key" = k ]; then SELECTED=$(( SELECTED>0 ? SELECTED-1 : n-1 ))
+    elif [ "$key" = j ]; then SELECTED=$(( SELECTED<n-1 ? SELECTED+1 : 0 ))
+    fi
+    # Move cursor back up over the n options + blank + footer (n+1 rows up
+    # from the footer row to land on the first option row)
+    printf '\r\033[%dA' "$((n+1))"
+  done
+  stty echo 2>/dev/null || true; printf '%s' "$CNORM"
+  echo ""
 }
 
 # ── Spinner ──────────────────────────────────────────────────────────────
 spin() {
-  local msg="$1"; shift
+  local m="$1"; shift
   [ "$TTY" = 0 ] && { "$@"; return $?; }
   "$@" &
   local pid=$! i=0 f='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
-  _tput civis
+  printf '%s' "$CIVIS"
   while kill -0 "$pid" 2>/dev/null; do
-    printf '\r'; color 6; printf ' %s' "${f:$((i%10)):1}"; rst; printf ' %s' "$msg"
+    printf '\r'; p; printf '%s%s%s %s' "$C" "${f:$((i%10)):1}" "$R" "$m"
     i=$((i+1)); sleep 0.08
   done
   local rc=0; wait "$pid" || rc=$?
-  printf '\r'; clr; _tput cnorm
+  printf '\r%s' "$EL"; printf '%s' "$CNORM"
   return "$rc"
 }
 
 confirm() {
   [ "$INTERACTIVE" = 0 ] && return 0
-  color 6; printf ' %s ' "$1"; rst
-  stty echo 2>/dev/null || true
+  p; printf '%s%s%s ' "$C" "$1" "$R"
   local a; IFS= read -r a </dev/tty || a=""
-  stty -echo 2>/dev/null || true
   case "${a:-$2}" in [yY]*) return 0;; *) return 1;; esac
 }
-
-msg()  { color 6; printf ' ▸'; rst; printf ' %s\n' "$*"; }
-good() { color 34; printf ' ✓'; rst; printf ' %s\n' "$*"; }
-bad()  { color 1; printf ' !'; rst; printf ' %s\n' "$*"; }
 
 # ── GitHub API ───────────────────────────────────────────────────────────
 json_assets() { printf '%s' "$RELEASE_JSON" | grep -o '"browser_download_url"[^,]*' | sed 's/.*"://;s/"//g;s/ //g'; }
@@ -308,25 +201,19 @@ pick_macos_dmg() {
   local arch="$ARCH"
   [ "$(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0)" = 1 ] && arch=arm64
   if [ -n "${PVZGE_ARCH:-}" ] && [ "${PVZGE_ARCH}" != auto ]; then
-    case "$PVZGE_ARCH" in
-      universal) pick macOS-Universal .dmg || true;; x86_64) pick macOS-x86_64 .dmg || true;; arm64) pick macOS-Apple-Silicon .dmg || true;;
-    esac; return
+    case "$PVZGE_ARCH" in universal) pick macOS-Universal .dmg||true;; x86_64) pick macOS-x86_64 .dmg||true;; arm64) pick macOS-Apple-Silicon .dmg||true;; esac; return
   fi
   local url=""
   case "$arch" in
-    arm64)  url="$(pick macOS-Apple-Silicon .dmg || true)"; [ -z "$url" ] && url="$(pick macOS-Universal .dmg || true)";;
-    x86_64) url="$(pick macOS-x86_64 .dmg || true)"; [ -z "$url" ] && url="$(pick macOS-Universal .dmg || true)";;
+    arm64)  url="$(pick macOS-Apple-Silicon .dmg||true)"; [ -z "$url" ] && url="$(pick macOS-Universal .dmg||true)";;
+    x86_64) url="$(pick macOS-x86_64 .dmg||true)"; [ -z "$url" ] && url="$(pick macOS-Universal .dmg||true)";;
   esac
   printf '%s' "$url"
 }
 
-# ── Install / Uninstall / Build (same logic, exits alternate screen) ─────
-leave_tui() {
-  [ "$TTY" = 1 ] && [ "$INTERACTIVE" = 1 ] && { _tput cnorm; _tput rmcup; stty echo 2>/dev/null || true; }
-}
-
+# ── Install / Uninstall / Build ──────────────────────────────────────────
 install_macos() {
-  leave_tui; echo ""
+  echo ""
   local url; url="$(pick_macos_dmg)"
   [ -n "$url" ] || { bad "No macOS build in $VERSION"; return 1; }
   good "Build: $(basename "$url")"
@@ -355,15 +242,14 @@ install_macos() {
   DONE_HINT="open -a \"$APP\""
 }
 install_linux() {
-  leave_tui; echo ""
+  echo ""
   [ "$ARCH" = x86_64 ] || { bad "Only x86_64 Linux builds"; return 1; }
   local url kind
-  if [ -n "$(pick Linux-x86_64 .deb || true)" ] && command -v dpkg >/dev/null; then url="$(pick Linux-x86_64 .deb)"; kind=deb
-  elif [ -n "$(pick Linux-x86_64 .AppImage || true)" ]; then url="$(pick Linux-x86_64 .AppImage)"; kind=appimage
+  if [ -n "$(pick Linux-x86_64 .deb||true)" ] && command -v dpkg >/dev/null; then url="$(pick Linux-x86_64 .deb)"; kind=deb
+  elif [ -n "$(pick Linux-x86_64 .AppImage||true)" ]; then url="$(pick Linux-x86_64 .AppImage)"; kind=appimage
   else bad "No Linux build"; return 1; fi
   good "Build: $(basename "$url")"
-  if [ -z "${PVZGE_FORCE:-}" ] && [ "${ACTION:-}" != reinstall ] && [ -f "$MARKER" ] && [ "$(cat "$MARKER")" = "$VERSION" ]; then
-    good "Already up to date ($VERSION)"; return 0; fi
+  if [ -z "${PVZGE_FORCE:-}" ] && [ "${ACTION:-}" != reinstall ] && [ -f "$MARKER" ] && [ "$(cat "$MARKER")" = "$VERSION" ]; then good "Already up to date ($VERSION)"; return 0; fi
   msg "Downloading  $(human_size "$url")"
   TMP="$(mktemp -d)"; curl -fSL --retry 5 --retry-all-errors -C - --progress-bar "$url" -o "$TMP/pkg" || return 1
   good "Downloaded"
@@ -375,7 +261,7 @@ install_linux() {
   mkdir -p "$(dirname "$MARKER")"; printf '%s' "$VERSION" >"$MARKER" 2>/dev/null || true
 }
 uninstall() {
-  leave_tui; echo ""
+  echo ""
   is_installed || { bad "Not installed."; return 0; }
   confirm "Remove ${APP} and all data? [y/N]" "N" || { msg "Cancelled."; return 0; }; echo ""
   if [ "$OS" = Darwin ]; then quit_if_running; local S=""; [ ! -w /Applications ] && { S=sudo; sudo -v 2>/dev/null || true; }
@@ -387,7 +273,7 @@ uninstall() {
   good "${APP} removed."
 }
 build_from_source() {
-  leave_tui; echo ""
+  echo ""
   for t in git cargo node; do command -v "$t" >/dev/null || { bad "Missing: $t"; return 1; }; done
   local tc=""; command -v tauri >/dev/null && tc=tauri || { cargo tauri --version >/dev/null 2>&1 && tc="cargo tauri"; } || {
     msg "Installing Tauri CLI..."; cargo install tauri-cli --version "^2" >/dev/null 2>&1 && tc="cargo tauri" || return 1; }
@@ -401,8 +287,7 @@ build_from_source() {
     $S xattr -dr com.apple.quarantine "/Applications/${APP}.app" 2>/dev/null || true; DONE_HINT="open -a \"$APP\""
   else local ai; ai="$(find "$src/src-tauri/target" -name '*.AppImage' -print -quit)"; [ -n "$ai" ] || return 1
     mkdir -p "${HOME}/.local/bin"; cp "$ai" "${HOME}/.local/bin/PvZ2-Gardendless.AppImage"
-    chmod +x "${HOME}/.local/bin/PvZ2-Gardendless.AppImage"
-    DONE_HINT="${HOME}/.local/bin/PvZ2-Gardendless.AppImage"; LAUNCH_BIN="$DONE_HINT"; fi
+    chmod +x "${HOME}/.local/bin/PvZ2-Gardendless.AppImage"; DONE_HINT="${HOME}/.local/bin/PvZ2-Gardendless.AppImage"; LAUNCH_BIN="$DONE_HINT"; fi
   good "Installed"
 }
 install_with_fallback() {
@@ -416,116 +301,52 @@ launch_app() {
   [ -n "${LAUNCH_BIN:-}" ] && { (setsid "$LAUNCH_BIN" >/dev/null 2>&1 &) 2>/dev/null || true; }
 }
 finish() {
-  echo ""; color 154; printf ' ✓ '; bold; printf '%s is ready\n\n' "$APP"; rst
-  [ -n "${DONE_HINT:-}" ] && { color 76; printf '  '; rst; dim; printf ' %s\n\n' "$DONE_HINT"; rst; }
-  dim; printf '   Game by Gaozih · Port by Marcus Nguyen\n\n'; rst
+  echo ""; p; printf '%s✓%s %s%s is ready%s\n\n' "$G1" "$R" "$B" "$APP" "$R"
+  [ -n "${DONE_HINT:-}" ] && { p; printf '   %s%s %s%s\n\n' "$G4" "" "$DONE_HINT" "$R"; }
+  dim "   Game by Gaozih · Port by Marcus Nguyen"; echo ""
 }
-
-# ── Simple flowing menu (small/odd terminals — no fullscreen chrome) ─────
-simple_menu() {
-  local labels=() descs=() all=("$@") i=0
-  while [ $i -lt ${#all[@]} ]; do labels+=("${all[$i]}"); descs+=("${all[$((i+1))]}"); i=$((i+2)); done
-  local n=${#labels[@]}
-  local icons=("󰏔" "󰑓" "󰩺" "󰙲" "" "")
-  local cur; cur="$(installed_version)"
-  local os_icon=""; [ "$OS" = Darwin ] && os_icon="" || os_icon=""
-
+show_help() {
   echo ""
-  bold; color 154; printf ' %s\n' "$APP"; rst
-  color 76;  printf ' %s %s · %s\n' "$os_icon" "$PLATFORM" "$ARCH"; rst
-  echo ""
-  color 76; printf ' Installed  '; rst; [ -n "$cur" ] && { color 154; printf '%s\n' "$cur"; } || { dim; printf '—\n'; }; rst
-  color 76; printf ' Latest     '; rst; color 154; printf '%s\n' "${VERSION:-…}"; rst
-  echo ""
-
-  SELECTED=0
-  _tput civis; stty -echo 2>/dev/null || true
-  while true; do
-    i=0
-    while [ $i -lt $n ]; do
-      _tput el
-      if [ $i -eq $SELECTED ]; then
-        color 154; bold; printf ' ▸ '; color 154; printf '%s ' "${icons[$i]:-}"
-        color 76; printf '%-13s' "${labels[$i]}"; rst; color 34; printf ' %s\n' "${descs[$i]}"; rst
-      else
-        dim; printf '   %s %-13s %s\n' "${icons[$i]:-}" "${labels[$i]}" "${descs[$i]}"; rst
-      fi
-      i=$((i+1))
-    done
-    _tput el; echo ""
-    _tput el; color 28; printf ' ↑↓'; rst; dim; printf ' Navigate  '; color 28; printf '⏎'; rst; dim; printf ' Select  '; color 28; printf 'q'; rst; dim; printf ' Quit'; rst
-    local key
-    IFS= read -rsn1 key </dev/tty
-    if [ "$key" = "$ESC" ]; then IFS= read -rsn2 key </dev/tty
-      case "$key" in '[A') SELECTED=$((SELECTED>0?SELECTED-1:n-1));; '[B') SELECTED=$((SELECTED<n-1?SELECTED+1:0));; esac
-    elif [ "$key" = "" ]; then break
-    elif [ "$key" = q ] || [ "$key" = Q ]; then stty echo 2>/dev/null||true; _tput cnorm; exit 0
-    elif [ "$key" = k ]; then SELECTED=$((SELECTED>0?SELECTED-1:n-1))
-    elif [ "$key" = j ]; then SELECTED=$((SELECTED<n-1?SELECTED+1:0))
-    fi
-    printf '\033[%dA' "$((n+2))"
-  done
-  stty echo 2>/dev/null || true; _tput cnorm; echo ""
+  p; printf '   %s%sEnvironment overrides%s\n\n' "$B" "$G1" "$R"
+  p; printf '   %sPVZGE_ACTION%s     install|build|uninstall\n' "$C" "$R"
+  p; printf '   %sPVZGE_VERSION%s    pin release (v0.8.2)\n' "$C" "$R"
+  p; printf '   %sPVZGE_FORCE%s      reinstall if current\n' "$C" "$R"
+  p; printf '   %sPVZGE_ARCH%s       x86_64|arm64|universal\n' "$C" "$R"
+  p; printf '   %sPVZGE_NO_LAUNCH%s  skip auto-open\n' "$C" "$R"
+  p; printf '   %sNO_COLOR%s         disable colors\n\n' "$C" "$R"
+  dim "   github.com/$REPO"; echo ""
 }
 
 # ── Main ─────────────────────────────────────────────────────────────────
 main() {
-  init_term
   OS="$(uname -s)"; ARCH="$(uname -m)"
   case "$OS" in Darwin) PLATFORM=macOS;; Linux) PLATFORM=Linux;; *) echo "Unsupported: $OS" >&2; exit 1;; esac
-
-  # Resolve release before drawing (so we have VERSION for the UI)
   resolve_release
 
   ACTION="${PVZGE_ACTION:-}"
 
-  # Interactive menu (size re-read in case the window changed since launch)
-  if [ -z "$ACTION" ] && [ "$INTERACTIVE" = 1 ] && [ "$TTY" = 1 ]; then
-    read_size
+  if [ -z "$ACTION" ] && [ "$INTERACTIVE" = 1 ]; then
+    [ "$TTY" = 1 ] && printf '\033[2J\033[H'  # clear screen + home (no alt buffer)
+    banner
     local cur; cur="$(installed_version)"
     local one="Install"; [ -n "$cur" ] && one="Update"
-    local items=(
-      "$one"       "Download latest release"
-      "Reinstall"  "Force clean re-download"
-      "Uninstall"  "Remove app and data"
-      "Build"      "Compile from source"
-      "Help"       "Environment overrides"
+    menu \
+      "$one"       "Download latest release" \
+      "Reinstall"  "Force clean re-download" \
+      "Uninstall"  "Remove app and data" \
+      "Build"      "Compile from source" \
+      "Help"       "Environment overrides" \
       "Quit"       ""
-    )
-
-    # Fullscreen TUI only when there's room; else simple flowing menu.
-    if [ "$COLS" -ge 92 ] && [ "$ROWS" -ge 26 ]; then
-      _tput smcup; _tput clear; stty -echo 2>/dev/null || true
-      draw_border 22 28 34 40
-      run_menu "${items[@]}"
-    else
-      simple_menu "${items[@]}"
-    fi
-
     case $SELECTED in
       0) ACTION=update ;;
       1) ACTION=reinstall; PVZGE_FORCE=1 ;;
       2) ACTION=uninstall ;;
       3) ACTION=build ;;
-      4) leave_tui; echo ""
-         bold; printf ' Environment overrides\n\n'; rst
-         color 6; printf ' PVZGE_ACTION'; rst; printf '     install|build|uninstall\n'
-         color 6; printf ' PVZGE_VERSION'; rst; printf '    pin release (v0.8.2)\n'
-         color 6; printf ' PVZGE_FORCE'; rst; printf '      reinstall if current\n'
-         color 6; printf ' PVZGE_ARCH'; rst; printf '       x86_64|arm64|universal\n'
-         color 6; printf ' PVZGE_NO_LAUNCH'; rst; printf '  skip auto-open\n'
-         color 6; printf ' NO_COLOR'; rst; printf '         disable colors\n\n'
-         dim; printf ' github.com/%s\n\n' "$REPO"; rst
-         exit 0 ;;
+      4) show_help; exit 0 ;;
       5) exit 0 ;;
     esac
   fi
-
-  # Non-interactive fallback
-  if [ -z "$ACTION" ]; then
-    ACTION=update
-    echo ""; bold; printf ' %s · %s\n' "$APP" "$VERSION"; rst; echo ""
-  fi
+  [ -z "$ACTION" ] && { ACTION=update; echo ""; p; printf ' %s%s · %s%s\n' "$B" "$APP" "$VERSION" "$R"; }
 
   case "$ACTION" in
     uninstall) uninstall ;;
