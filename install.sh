@@ -33,12 +33,27 @@ INTERACTIVE=0; TTY=0; COLS=80; ROWS=24
 TMP=""; MOUNTED_DMG=""; VERSION=""; RELEASE_JSON=""
 OS=""; ARCH=""; PLATFORM=""
 
-# ── Init terminal ────────────────────────────────────────────────────────
+# ── Terminal size — stty first (kernel tty size, ignores $TERM), then
+#    tput, then $COLUMNS/$LINES, then 80x24. tput silently returns the
+#    80x24 fallback when $TERM is unset (Finder/odd launchers), which is
+#    what jammed the UI into a corner — stty avoids that entirely. ────────
+read_size() {
+  local sz=""
+  sz="$(stty size </dev/tty 2>/dev/null || true)"
+  if [ -n "$sz" ] && [ "${sz% *}" -ge 1 ] 2>/dev/null; then
+    ROWS="${sz%% *}"; COLS="${sz##* }"
+  else
+    COLS="$(command tput cols 2>/dev/null || echo "${COLUMNS:-80}")"
+    ROWS="$(command tput lines 2>/dev/null || echo "${LINES:-24}")"
+  fi
+  [ -n "$COLS" ] && [ "$COLS" -ge 1 ] 2>/dev/null || COLS=80
+  [ -n "$ROWS" ] && [ "$ROWS" -ge 1 ] 2>/dev/null || ROWS=24
+}
+
 init_term() {
   if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then TTY=1; fi
   [ -z "${PVZGE_YES:-}" ] && [ -r /dev/tty ] && [ -t 1 ] && INTERACTIVE=1
-  COLS="$(command tput cols 2>/dev/null || echo 80)"
-  ROWS="$(command tput lines 2>/dev/null || echo 24)"
+  read_size
 }
 
 # ── Cleanup (Nightfall-style: restore terminal on any exit) ──────────────
@@ -125,7 +140,8 @@ MENU_LABELS=() MENU_DESCS=()
 
 draw_ui() {
   local cx=$((COLS / 2))
-  local top=4
+  # Vertically center the ~18-row content block within the real terminal
+  local top=$(( (ROWS - 18) / 2 )); [ "$top" -lt 2 ] && top=2
 
   # ── Left: peashooter ──
   draw_peashooter "$((top + 2))" "$((cx - 42))"
@@ -405,6 +421,53 @@ finish() {
   dim; printf '   Game by Gaozih · Port by Marcus Nguyen\n\n'; rst
 }
 
+# ── Simple flowing menu (small/odd terminals — no fullscreen chrome) ─────
+simple_menu() {
+  local labels=() descs=() all=("$@") i=0
+  while [ $i -lt ${#all[@]} ]; do labels+=("${all[$i]}"); descs+=("${all[$((i+1))]}"); i=$((i+2)); done
+  local n=${#labels[@]}
+  local icons=("󰏔" "󰑓" "󰩺" "󰙲" "" "")
+  local cur; cur="$(installed_version)"
+  local os_icon=""; [ "$OS" = Darwin ] && os_icon="" || os_icon=""
+
+  echo ""
+  bold; color 154; printf ' %s\n' "$APP"; rst
+  color 76;  printf ' %s %s · %s\n' "$os_icon" "$PLATFORM" "$ARCH"; rst
+  echo ""
+  color 76; printf ' Installed  '; rst; [ -n "$cur" ] && { color 154; printf '%s\n' "$cur"; } || { dim; printf '—\n'; }; rst
+  color 76; printf ' Latest     '; rst; color 154; printf '%s\n' "${VERSION:-…}"; rst
+  echo ""
+
+  SELECTED=0
+  _tput civis; stty -echo 2>/dev/null || true
+  while true; do
+    i=0
+    while [ $i -lt $n ]; do
+      _tput el
+      if [ $i -eq $SELECTED ]; then
+        color 154; bold; printf ' ▸ '; color 154; printf '%s ' "${icons[$i]:-}"
+        color 76; printf '%-13s' "${labels[$i]}"; rst; color 34; printf ' %s\n' "${descs[$i]}"; rst
+      else
+        dim; printf '   %s %-13s %s\n' "${icons[$i]:-}" "${labels[$i]}" "${descs[$i]}"; rst
+      fi
+      i=$((i+1))
+    done
+    _tput el; echo ""
+    _tput el; color 28; printf ' ↑↓'; rst; dim; printf ' Navigate  '; color 28; printf '⏎'; rst; dim; printf ' Select  '; color 28; printf 'q'; rst; dim; printf ' Quit'; rst
+    local key
+    IFS= read -rsn1 key </dev/tty
+    if [ "$key" = "$ESC" ]; then IFS= read -rsn2 key </dev/tty
+      case "$key" in '[A') SELECTED=$((SELECTED>0?SELECTED-1:n-1));; '[B') SELECTED=$((SELECTED<n-1?SELECTED+1:0));; esac
+    elif [ "$key" = "" ]; then break
+    elif [ "$key" = q ] || [ "$key" = Q ]; then stty echo 2>/dev/null||true; _tput cnorm; exit 0
+    elif [ "$key" = k ]; then SELECTED=$((SELECTED>0?SELECTED-1:n-1))
+    elif [ "$key" = j ]; then SELECTED=$((SELECTED<n-1?SELECTED+1:0))
+    fi
+    printf '\033[%dA' "$((n+2))"
+  done
+  stty echo 2>/dev/null || true; _tput cnorm; echo ""
+}
+
 # ── Main ─────────────────────────────────────────────────────────────────
 main() {
   init_term
@@ -416,25 +479,28 @@ main() {
 
   ACTION="${PVZGE_ACTION:-}"
 
-  # Interactive TUI: alternate screen + border + full UI
+  # Interactive menu (size re-read in case the window changed since launch)
   if [ -z "$ACTION" ] && [ "$INTERACTIVE" = 1 ] && [ "$TTY" = 1 ]; then
-    _tput smcup
-    _tput clear
-    stty -echo 2>/dev/null || true
-
-    # Animated border (PvZ2 green gradient: dark→vivid)
-    draw_border 22 28 34 40
-
+    read_size
     local cur; cur="$(installed_version)"
     local one="Install"; [ -n "$cur" ] && one="Update"
-
-    run_menu \
-      "$one"       "Download latest release" \
-      "Reinstall"  "Force clean re-download" \
-      "Uninstall"  "Remove app and data" \
-      "Build"      "Compile from source" \
-      "Help"       "Environment overrides" \
+    local items=(
+      "$one"       "Download latest release"
+      "Reinstall"  "Force clean re-download"
+      "Uninstall"  "Remove app and data"
+      "Build"      "Compile from source"
+      "Help"       "Environment overrides"
       "Quit"       ""
+    )
+
+    # Fullscreen TUI only when there's room; else simple flowing menu.
+    if [ "$COLS" -ge 92 ] && [ "$ROWS" -ge 26 ]; then
+      _tput smcup; _tput clear; stty -echo 2>/dev/null || true
+      draw_border 22 28 34 40
+      run_menu "${items[@]}"
+    else
+      simple_menu "${items[@]}"
+    fi
 
     case $SELECTED in
       0) ACTION=update ;;
