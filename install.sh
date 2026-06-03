@@ -427,30 +427,47 @@ bytes_label() {
     else printf "%dB", n;
   }'
 }
+time_label() {
+  local s="${1:-0}"
+  case "$s" in ''|*[!0-9]*) s=0 ;; esac
+  if [ "$s" -ge 3600 ]; then
+    printf '%dh%02dm' "$((s / 3600))" "$(((s % 3600) / 60))"
+  elif [ "$s" -ge 60 ]; then
+    printf '%dm%02ds' "$((s / 60))" "$((s % 60))"
+  else
+    printf '%ss' "$s"
+  fi
+}
 file_bytes() {
   [ -f "$1" ] || { printf '0'; return; }
   wc -c < "$1" | tr -d ' '
 }
 draw_download_progress() {
   [ "$CAN_TTY" = 1 ] || return 0
-  local done="$1" total="$2" width=24 filled empty i bar="" gap=""
+  local done="$1" total="$2" started="${3:-$(date +%s)}" now elapsed speed eta
+  local width=20 filled empty i bar="" gap=""
   case "$done" in ''|*[!0-9]*) done=0 ;; esac
   case "$total" in ''|*[!0-9]*) return 0 ;; esac
   [ "$total" -gt 0 ] || return 0
   [ "$done" -gt "$total" ] && done="$total"
+  now="$(date +%s)"
+  elapsed=$((now - started)); [ "$elapsed" -lt 1 ] && elapsed=1
+  speed=$((done / elapsed))
+  [ "$speed" -gt 0 ] && eta=$(((total - done) / speed)) || eta=0
   local pct=$((done * 100 / total))
   filled=$((pct * width / 100))
   empty=$((width - filled))
   i=0; while [ "$i" -lt "$filled" ]; do bar="${bar}█"; i=$((i+1)); done
   i=0; while [ "$i" -lt "$empty" ]; do gap="${gap}░"; i=$((i+1)); done
   printf '\r%s' "$EL"
-  printf '%s%s[%s%s%s%s] %3d%%  %s/%s%s' \
+  printf '%s%s[%s%s%s%s] %3d%%  %s/%s  %s/s  eta %s%s' \
     "$MARGIN" "$G5" "$bar" "$D" "$gap" "$G5" "$pct" \
-    "$(bytes_label "$done")" "$(bytes_label "$total")" "$R"
+    "$(bytes_label "$done")" "$(bytes_label "$total")" \
+    "$(bytes_label "$speed")" "$(time_label "$eta")" "$R"
 }
 aria2_download() {
   local url="$1" dest="$2" total="${3:-}" rc=0
-  local log="${dest}.aria2.log"
+  local log="${dest}.aria2.log" started
   aria2c \
     --quiet=true \
     --allow-overwrite=true \
@@ -470,15 +487,17 @@ aria2_download() {
   DOWNLOAD_PID=$!
 
   if [ "$CAN_TTY" = 1 ] && [ -n "$total" ]; then
+    printf '%s' "$CIVIS"
+    started="$(date +%s)"
     while kill -0 "$DOWNLOAD_PID" 2>/dev/null; do
-      draw_download_progress "$(file_bytes "$dest")" "$total"
+      draw_download_progress "$(file_bytes "$dest")" "$total" "$started"
       sleep 0.15
     done
   fi
 
   wait "$DOWNLOAD_PID" || rc=$?
-  [ -n "$total" ] && draw_download_progress "$(file_bytes "$dest")" "$total"
-  [ "$CAN_TTY" = 1 ] && printf '\n'
+  [ -n "$total" ] && [ "$CAN_TTY" = 1 ] && draw_download_progress "$(file_bytes "$dest")" "$total" "${started:-$(date +%s)}"
+  [ "$CAN_TTY" = 1 ] && printf '%s\n' "$CNORM"
   DOWNLOAD_PID=""
   rm -f "$log" 2>/dev/null || true
   return "$rc"
