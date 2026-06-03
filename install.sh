@@ -68,7 +68,7 @@ pat() { at "$1" "$2"; shift 2; printf '%s' "$*"; }
 # Uses ░▒▓█ gradient in greens (28→34→40→46→82→118)
 draw_peashooter() {
   local r=$1 c=$2
-  local g1=22 g2=28 g3=34 g4=40 g5=46 g6=82
+  local g1=22 g2=28 g3=34 g4=76 g5=154 g6=118
   local lines=(
     "        ░▒▓██▓▒░"
     "      ░▓██████████▓░"
@@ -132,47 +132,55 @@ draw_ui() {
 
   # ── Right: info panel ──
   local rx=$((cx - 10))
-  bold; color 34
+  # Nerd Font OS icon
+  local os_icon=""; [ "$OS" = Darwin ] && os_icon="" || os_icon=""
+  bold; color 154
   pat "$((top))" "$rx" "$APP"
-  rst; dim
-  pat "$((top + 1))" "$rx" "$PLATFORM · $ARCH"
+  rst; color 76
+  pat "$((top + 1))" "$rx" "$os_icon $PLATFORM · $ARCH"
   rst
 
   # Status
   local cur; cur="$(installed_version)"
   local y=$((top + 3))
-  dim; pat "$y" "$rx" "Installed  "; rst
-  if [ -n "$cur" ]; then color 34; printf '%s' "$cur"; else dim; printf '—'; fi
+  color 76; pat "$y" "$rx" "  Installed  "; rst
+  if [ -n "$cur" ]; then color 154; printf '%s' "$cur"; else dim; printf '—'; fi
   rst
 
   y=$((y + 1))
-  dim; pat "$y" "$rx" "Latest     "; rst
-  color 34; printf '%s' "${VERSION:-…}"; rst
+  color 76; pat "$y" "$rx" "  Latest     "; rst
+  color 154; printf '%s' "${VERSION:-…}"; rst
 
-  # ── Menu ──
+  # ── Menu (with Nerd Font icons) ──
+  # Icons: 󰏔 download, 󰑓 reinstall, 󰩺 uninstall, 󰙲 build,  help,  quit
+  local icons=("󰏔" "󰑓" "󰩺" "󰙲" "" "")
   y=$((top + 7))
   local n=${#MENU_LABELS[@]} i=0
   while [ $i -lt $n ]; do
-    at "$y" "$rx"; clr
+    at "$y" 0; clr  # clear from col 0 to prevent smear
+    at "$y" "$rx"
     if [ $i -eq $SELECTED ]; then
-      color 6; bold; printf '▸ '; rst
-      color 6; printf '%-14s' "${MENU_LABELS[$i]}"; rst
-      printf ' %s' "${MENU_DESCS[$i]}"
+      color 154; bold; printf '▸ '; rst
+      color 154; printf '%s ' "${icons[$i]:-}"; rst
+      color 76; bold; printf '%-13s' "${MENU_LABELS[$i]}"; rst
+      color 34; printf ' %s' "${MENU_DESCS[$i]}"; rst
     else
-      dim; printf '  %-14s %s' "${MENU_LABELS[$i]}" "${MENU_DESCS[$i]}"; rst
+      dim; printf '  %s %-13s %s' "${icons[$i]:-}" "${MENU_LABELS[$i]}" "${MENU_DESCS[$i]}"; rst
     fi
     y=$((y + 1)); i=$((i + 1))
   done
 
   # Footer
   y=$((ROWS - 3))
-  at "$y" "$rx"; clr
-  dim; printf '↑↓ Navigate  ⏎ Select  q Quit'; rst
+  at "$y" 0; clr; at "$y" "$rx"
+  color 28; printf '↑↓'; rst; dim; printf ' Navigate  '; rst
+  color 28; printf '⏎'; rst; dim; printf ' Select  '; rst
+  color 28; printf 'q'; rst; dim; printf ' Quit'; rst
 
   # Credits
   y=$((ROWS - 2))
-  at "$y" "$((cx - 24))"
-  dim; printf 'Game by Gaozih · macOS/Linux port by Marcus Nguyen'; rst
+  at "$y" "$((cx - 26))"
+  dim; printf '  Game by Gaozih · macOS/Linux port by Marcus Nguyen'; rst
 }
 
 # ── Arrow-key event loop (Nightfall-style: read from tty) ────────────────
@@ -392,9 +400,9 @@ launch_app() {
   [ -n "${LAUNCH_BIN:-}" ] && { (setsid "$LAUNCH_BIN" >/dev/null 2>&1 &) 2>/dev/null || true; }
 }
 finish() {
-  echo ""; color 34; printf ' ✓ '; bold; printf '%s is ready\n\n' "$APP"; rst
-  [ -n "${DONE_HINT:-}" ] && { dim; printf ' $ %s\n\n' "$DONE_HINT"; rst; }
-  dim; printf ' Game by Gaozih · Port by Marcus Nguyen\n\n'; rst
+  echo ""; color 154; printf ' ✓ '; bold; printf '%s is ready\n\n' "$APP"; rst
+  [ -n "${DONE_HINT:-}" ] && { color 76; printf '  '; rst; dim; printf ' %s\n\n' "$DONE_HINT"; rst; }
+  dim; printf '   Game by Gaozih · Port by Marcus Nguyen\n\n'; rst
 }
 
 # ── Main ─────────────────────────────────────────────────────────────────
@@ -414,8 +422,8 @@ main() {
     _tput clear
     stty -echo 2>/dev/null || true
 
-    # Animated border (dark→mid green gradient)
-    draw_border 22 23 28 29
+    # Animated border (PvZ2 green gradient: dark→vivid)
+    draw_border 22 28 34 40
 
     local cur; cur="$(installed_version)"
     local one="Install"; [ -n "$cur" ] && one="Update"
