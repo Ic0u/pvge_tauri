@@ -1,7 +1,7 @@
 <div align="center">
 <img width="140" src="src-tauri/icons/source.webp" alt="PvZ2 Gardendless icon">
 
-# PvZ2 Gardendless UNo Port
+# PvZ2 Gardendless Port
 
 A native desktop wrapper for **PvZ2 Gardendless**, packaged with **Tauri**. For macOS & Linux users who doesnt give a fuck bout docker container, this is unofficial.
 
