@@ -43,7 +43,7 @@ You can also grab the latest build manually from [Releases](https://github.com/I
 | macOS Apple Silicon | `PvZ2-Gardendless-macOS-Apple-Silicon.dmg` |
 | macOS Universal | `PvZ2-Gardendless-macOS-Universal.dmg` |
 | Linux x86_64 | `.deb` / `.rpm` / `.AppImage` |
-| Linux ARM_64 | `coming soon` |
+| Linux ARM64 | `.deb` / `.rpm` / `.AppImage` |
 
 > [!TIP]
 > macOS builds are currently unsigned. If Gatekeeper blocks the app from launching, you can bypass it instantly by opening your Terminal and running:
@@ -64,7 +64,7 @@ Installer environment overrides:
 | Variable | Effect |
 | --- | --- |
 | `PVZGE_FORCE=1` | Reinstall even if already on the latest version |
-| `PVZGE_VERSION=v0.8.2` | Install a specific release instead of latest |
+| `PVZGE_VERSION=v0.9.3` | Install a specific release instead of latest |
 | `PVZGE_ARCH=universal` | Force a macOS variant: `universal`, `x86_64`, or `arm64` |
 | `NO_COLOR=1` | Disable colored output |
 
@@ -80,7 +80,7 @@ cargo run --manifest-path src-tauri/Cargo.toml
 
 ## How It Works
 
-The app starts a local asset server on `127.0.0.1` with a random port, then opens a native WebView window pointing to it. Game assets live in `docs/` and are bundled into release builds.
+The app starts a local asset server on `127.0.0.1:21073`, falling back to a free port only when needed, then opens a native WebView window pointing to it. Game assets live in `docs/` and are bundled into release builds.
 
 ## Troubleshooting
 

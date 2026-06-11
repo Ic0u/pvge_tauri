@@ -571,10 +571,14 @@ install_macos() {
 }
 install_linux() {
   phase_step "1/3" "Resolve release package"
-  [ "$ARCH" = x86_64 ] || { bad "Only x86_64 Linux builds"; return 1; }
-  local url kind
-  if [ -n "$(pick Linux-x86_64 .deb||true)" ] && command -v dpkg >/dev/null; then url="$(pick Linux-x86_64 .deb)"; kind=deb
-  elif [ -n "$(pick Linux-x86_64 .AppImage||true)" ]; then url="$(pick Linux-x86_64 .AppImage)"; kind=appimage
+  local asset_arch url kind
+  case "$ARCH" in
+    x86_64) asset_arch=x86_64 ;;
+    arm64|aarch64) asset_arch=aarch64 ;;
+    *) bad "Unsupported Linux architecture: $ARCH"; return 1 ;;
+  esac
+  if [ -n "$(pick "Linux-${asset_arch}" .deb||true)" ] && command -v dpkg >/dev/null; then url="$(pick "Linux-${asset_arch}" .deb)"; kind=deb
+  elif [ -n "$(pick "Linux-${asset_arch}" .AppImage||true)" ]; then url="$(pick "Linux-${asset_arch}" .AppImage)"; kind=appimage
   else bad "No Linux build"; return 1; fi
   phase_detail "Version" "$VERSION"
   phase_detail "Format" "$kind"
@@ -627,7 +631,9 @@ build_from_source() {
   echo ""
   phase_step "3/4" "Compile bundle"
   msg "Compiling (may take several minutes)..."
-  (cd "$src/src-tauri" && $tc build --bundles app) || return 1; good "Built"
+  local bundle=app
+  [ "$OS" = Linux ] && bundle=appimage
+  (cd "$src/src-tauri" && $tc build --bundles "$bundle") || return 1; good "Built"
   echo ""
   phase_step "4/4" "Install built game"
   if [ "$OS" = Darwin ]; then local b; b="$(find "$src/src-tauri/target" -maxdepth 5 -name '*.app' -path '*/release/bundle/macos/*' -print -quit)"
@@ -673,7 +679,7 @@ show_help() {
   p; printf '%s%sPVZGE_ACTION%s     install|reinstall|build|uninstall|help\n' "$MARGIN" "$C" "$R"
   echo ""
   phase_step "Release" "Pin or force package selection"
-  p; printf '%s%sPVZGE_VERSION%s    pin release (v0.8.2)\n' "$MARGIN" "$C" "$R"
+  p; printf '%s%sPVZGE_VERSION%s    pin release (v0.9.3)\n' "$MARGIN" "$C" "$R"
   p; printf '%s%sPVZGE_FORCE%s      reinstall if current\n' "$MARGIN" "$C" "$R"
   p; printf '%s%sPVZGE_ARCH%s       x86_64|arm64|universal\n' "$MARGIN" "$C" "$R"
   echo ""

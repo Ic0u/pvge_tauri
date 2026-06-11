@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.3] - 2026-06-11
+
+Game version: `PvZ2_Prerelease_AF_P2`
+
+### Added
+- Plant-Decoding Minigame.
+- Aerial Fortress Part 2, with levels by @莱池_余垛.
+- Bulbkekengi, Loquanado, Pea Commando, Wasabi Whip, and Goo Peashooter.
+- Drone Engineer, Arbiter - Model X, and more holiday zombies.
+- Recommended and Challenging Card Decks for Aerial Fortress levels.
+- Native desktop release packages for macOS Intel, Apple Silicon, Universal, Linux x86_64, and Linux ARM64.
+
 ## [0.8.2 build#2] - 2026-06-02
 
 ### Fixed

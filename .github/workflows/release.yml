@@ -9,7 +9,7 @@ on:
       tag:
         description: Release tag to create or update
         required: true
-        default: v0.8.3-build2
+        default: v0.9.3
 
 permissions:
   contents: write
@@ -124,9 +124,21 @@ jobs:
           path: release/${{ matrix.dmg_name }}
 
   linux:
-    name: Build Linux x86_64
+    name: Build ${{ matrix.label }}
     needs: check
-    runs-on: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Linux x86_64
+            runner: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            suffix: x86_64
+          - label: Linux ARM64
+            runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            suffix: aarch64
 
     steps:
       - name: Checkout
@@ -146,43 +158,46 @@ jobs:
             libwebkit2gtk-4.1-dev \
             libxdo-dev \
             patchelf \
+            rpm \
             wget
 
       - name: Configure Rust
         run: |
           rustup update stable
           rustup default stable
+          rustup target add ${{ matrix.target }}
 
       - name: Install Tauri CLI
         run: npm install -g @tauri-apps/cli@2
 
       - name: Build Linux packages
         working-directory: src-tauri
-        run: tauri build --bundles deb,appimage,rpm
+        run: tauri build --target "${{ matrix.target }}" --bundles deb,appimage,rpm
 
       - name: Rename Linux packages
         run: |
           mkdir -p release
-          deb="$(find src-tauri/target/release/bundle/deb -name "*.deb" -print -quit)"
-          appimage="$(find src-tauri/target/release/bundle/appimage -name "*.AppImage" -print -quit)"
-          rpm="$(find src-tauri/target/release/bundle/rpm -name "*.rpm" -print -quit)"
+          bundle="src-tauri/target/${{ matrix.target }}/release/bundle"
+          deb="$(find "$bundle/deb" -name "*.deb" -print -quit)"
+          appimage="$(find "$bundle/appimage" -name "*.AppImage" -print -quit)"
+          rpm="$(find "$bundle/rpm" -name "*.rpm" -print -quit)"
           test -n "$deb"
           test -n "$appimage"
           test -n "$rpm"
-          cp "$deb" release/PvZ2-Gardendless-Linux-x86_64.deb
-          cp "$appimage" release/PvZ2-Gardendless-Linux-x86_64.AppImage
-          cp "$rpm" release/PvZ2-Gardendless-Linux-x86_64.rpm
+          cp "$deb" "release/PvZ2-Gardendless-Linux-${{ matrix.suffix }}.deb"
+          cp "$appimage" "release/PvZ2-Gardendless-Linux-${{ matrix.suffix }}.AppImage"
+          cp "$rpm" "release/PvZ2-Gardendless-Linux-${{ matrix.suffix }}.rpm"
           ls -lh release
 
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v4
         with:
-          name: PvZ2-Gardendless-Linux-x86_64
+          name: PvZ2-Gardendless-Linux-${{ matrix.suffix }}
           if-no-files-found: error
           path: |
-            release/PvZ2-Gardendless-Linux-x86_64.deb
-            release/PvZ2-Gardendless-Linux-x86_64.AppImage
-            release/PvZ2-Gardendless-Linux-x86_64.rpm
+            release/PvZ2-Gardendless-Linux-${{ matrix.suffix }}.deb
+            release/PvZ2-Gardendless-Linux-${{ matrix.suffix }}.AppImage
+            release/PvZ2-Gardendless-Linux-${{ matrix.suffix }}.rpm
 
   release:
     name: Publish GitHub Release
@@ -195,6 +210,12 @@ jobs:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
 
     steps:
+      - name: Checkout release notes
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: RELEASE_NOTES.md
+          sparse-checkout-cone-mode: false
+
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
@@ -217,10 +238,14 @@ jobs:
 
           if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "PvZ2 Gardendless $RELEASE_TAG" \
+              --notes-file RELEASE_NOTES.md
           else
             gh release create "$RELEASE_TAG" "${assets[@]}" \
               --repo "$GITHUB_REPOSITORY" \
               --target "$GITHUB_SHA" \
               --title "PvZ2 Gardendless $RELEASE_TAG" \
-              --notes "Unsigned PvZ2 Gardendless desktop builds for macOS and Linux."
+              --notes-file RELEASE_NOTES.md
           fi

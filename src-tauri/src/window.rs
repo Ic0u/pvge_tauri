@@ -30,8 +30,8 @@ pub fn setup(app: &tauri::App, port: u16) -> Result<(), Error> {
         let _ = app
             .notification()
             .builder()
-            .title("What's New in v0.8.3")
-            .body("• Preserves game saves across restarts\n• Improves local asset loading performance\n• Adds update notifications and tighter WebView security")
+            .title("What's New in v0.9.3")
+            .body("PvZ2_Prerelease_AF_P2\n\n• Aerial Fortress Part 2\n• Plant-Decoding Minigame\n• New plants, zombies, and card decks")
             .show();
     }
 
@@ -166,7 +166,7 @@ mod tests {
 
     #[test]
     fn detects_newer_versions() {
-        assert!(version_is_newer("v0.8.3", "0.8.2"));
+        assert!(version_is_newer("v0.9.3", "0.8.3"));
         assert!(version_is_newer("v1.0.0", "0.9.9"));
         assert!(version_is_newer("0.8.10", "0.8.2"));
     }
